@@ -1,5 +1,12 @@
+"""Model loading and forecasting helpers.
+
+- RF: expects scikit-learn model saved via joblib
+- Prophet: expects a fitted Prophet model saved with joblib
+- LSTM: expects a Keras model saved via model.save(...)
+"""
+
 from __future__ import annotations
-from typing import Tuple, Optional, Dict, Any
+from typing import Any, Dict, Optional, Tuple
 import numpy as np
 import joblib
 
@@ -7,102 +14,126 @@ from .data_utils import split_features_target, make_prophet_frame, add_time_feat
 from .constants import DEFAULT_DATE_COL, DEFAULT_TARGET_COL
 from sklearn.model_selection import train_test_split
 
-# ----- RF helpers -----
+# ----- Random Forest helpers -----
 def load_rf_model(path: str):
-    """Load a scikit-learn model saved via joblib."""
+    """Load scikit-learn model from joblib file."""
     return joblib.load(path)
 
-def predict_rf(model, X: np.ndarray) -> np.ndarray:
-    """Predict with RF (or scikit-learn regressor)."""
+
+def predict_rf(model: Any, X: np.ndarray) -> np.ndarray:
+    """Predict with scikit-learn regressor."""
     return model.predict(X)
 
-# ----- Prophet helpers -----
+
+# ----- Prophet helpers (lazy import) -----
 def load_prophet_model(path: str):
-    """Load a Prophet model serialized with joblib. Requires prophet installed."""
+    """Load Prophet model saved via joblib. Raises helpful error if Prophet not installed."""
     try:
         import prophet  # noqa: F401
     except Exception as e:
-        raise RuntimeError("Prophet not installed. Add 'prophet' to requirements.") from e
+        raise RuntimeError("Prophet is not installed. Install 'prophet' to use Prophet models.") from e
     return joblib.load(path)
 
-def forecast_prophet(model, df_prophet, periods: int = 30, freq: str = "D"):
-    """Return Prophet forecast DataFrame (model must be already fitted)."""
+
+def forecast_prophet(model: Any, periods: int = 30, freq: str = "D"):
+    """Create future dataframe and forecast using a fitted Prophet model."""
     future = model.make_future_dataframe(periods=periods, freq=freq)
     forecast = model.predict(future)
     return forecast
 
-# ----- LSTM helpers -----
-def load_lstm_model(path: str):
-    """Load a Keras/TensorFlow model saved via model.save(...)."""
-    try:
-        import tensorflow as tf  # noqa: F401
-        from tensorflow.keras.models import load_model
-    except Exception as e:
-        raise RuntimeError("TensorFlow not installed. Add 'tensorflow' to requirements.") from e
-    return load_model(path)
 
-def create_sequences(X: np.ndarray, y: np.ndarray, time_steps: int = 10) -> tuple[np.ndarray, np.ndarray]:
-    """Create sequences for LSTM training/prediction."""
+# ----- LSTM helpers (lazy import) -----
+def load_lstm_model(path: str):
+    """Load a Keras/TensorFlow model saved with model.save()."""
+    try:
+        import tensorflow as _tf  # noqa: F401
+        from tensorflow.keras.models import load_model as _load_model
+    except Exception as e:
+        raise RuntimeError("TensorFlow/Keras is not installed. Install 'tensorflow' to use LSTM models.") from e
+    return _load_model(path)
+
+
+def create_sequences(X: np.ndarray, y: np.ndarray, time_steps: int = 10) -> Tuple[np.ndarray, np.ndarray]:
+    """Create 3D sequences for LSTM training/prediction."""
     Xs, ys = [], []
     for i in range(len(X) - time_steps):
         Xs.append(X[i:(i + time_steps)])
         ys.append(y[i + time_steps])
     return np.array(Xs), np.array(ys)
 
-def predict_lstm(model, X_seq: np.ndarray) -> np.ndarray:
-    """Predict with loaded LSTM model."""
-    return model.predict(X_seq).flatten()
 
-# ----- Convenience: make_forecast -----
-def make_forecast(model: Any, model_name: str, df, horizon: int = 30, date_col: str = DEFAULT_DATE_COL, target_col: str = DEFAULT_TARGET_COL, drop_cols: Optional[list] = None) -> Dict[str, Any]:
+def predict_lstm(model: Any, X_seq: np.ndarray) -> np.ndarray:
+    """Predict with a Keras LSTM model and return flattened array."""
+    out = model.predict(X_seq, verbose=0)
+    return out.flatten()
+
+
+# ----- Unified forecasting -----
+def make_forecast(
+    model: Any,
+    model_name: str,
+    df,
+    horizon: int = DEFAULT_DATE_COL,  # will usually be replaced
+    date_col: str = DEFAULT_DATE_COL,
+    target_col: str = DEFAULT_TARGET_COL,
+    drop_cols: Optional[list] = None,
+    lstm_time_steps: int = 10,
+) -> Dict[str, Any]:
     """
-    Unified forecast interface.
-    Returns dict with keys:
-      - 'forecast_df' (for Prophet) or None
-      - 'y_true' (series used for evaluation - test set)
-      - 'y_pred' (predictions aligned to y_true)
+    Unified interface for producing forecasts/predictions.
+    Returns a dict containing:
+      - 'forecast_df' : (Prophet) DataFrame with forecast (ds,yhat,...)
+      - 'y_true' : array-like of true values used for evaluation (if applicable)
+      - 'y_pred' : array-like of predictions aligned to y_true (if applicable)
     Notes:
-      - RF and LSTM return predictions on a holdout test split (80/20),
-        not recursive multi-step forecasts. Implement recursive logic if you need future multi-step predictions.
-      - Prophet returns forecast dataframe including future horizon.
+      - For RF and LSTM we do a non-shuffle train/test split (last 20% used as test).
+      - RF predictions are single-step on test-set (not recursive multi-step).
+      - LSTM predictions here use sequence creation (time_steps) and evaluate on last portion.
+      - Prophet returns future forecast including the horizon.
     """
-    res = {"forecast_df": None, "y_true": None, "y_pred": None}
-    if model_name.lower() == "prophet":
-        # Expect df contains date_col and target_col
+    out = {"forecast_df": None, "y_true": None, "y_pred": None}
+
+    # Prophet path
+    if model_name.lower() in ("prophet",):
         prophet_df = make_prophet_frame(df, date_col=date_col, target_col=target_col)
-        forecast = forecast_prophet(model, prophet_df, periods=horizon)
-        res["forecast_df"] = forecast
-        # If model has history, extract overlap to compute simple eval (last len(history) vs forecast start)
-        return res
+        forecast = forecast_prophet(model, periods=horizon)
+        out["forecast_df"] = forecast
+        return out
 
-    # For RF and LSTM: build features, split, predict on test split
-    df_proc = add_time_features(df, date_col=date_col, include_cyclical=True)
-    X, y = split_features_target(df_proc, target_col=target_col, drop_cols=[date_col])
-    if len(X) < 10:
-        raise ValueError("Not enough rows to produce train/test split for RF/LSTM predictions.")
+    # RF / LSTM path
+    df_proc = df.copy()
+    if date_col in df_proc.columns:
+        df_proc = add_time_features(df_proc, date_col=date_col, include_cyclical=True)
 
-    X_arr = X.values
-    y_arr = y.values
+    X_df, y_ser = split_features_target(df_proc, target_col=target_col, drop_cols=[date_col] if date_col in df_proc.columns else None)
+    X_arr = X_df.values
+    y_arr = y_ser.values
 
-    X_train, X_test, y_train, y_test = train_test_split(X_arr, y_arr, test_size=0.2, shuffle=False)
-    if model_name.lower() == "random forest" or model_name.lower() == "rf":
+    if len(X_arr) < 10:
+        raise ValueError("Not enough rows to produce train/test split.")
+
+    # non-shuffled split so time order preserved
+    split_idx = int(len(X_arr) * 0.8)
+    X_train, X_test = X_arr[:split_idx], X_arr[split_idx:]
+    y_train, y_test = y_arr[:split_idx], y_arr[split_idx:]
+
+    if model_name.lower() in ("random forest", "rf"):
         y_pred = predict_rf(model, X_test)
-        res["y_true"] = y_test
-        res["y_pred"] = y_pred
-        return res
+        out["y_true"] = y_test
+        out["y_pred"] = y_pred
+        return out
 
-    if model_name.lower() == "lstm":
-        # Create sequences from full array with default time_steps=10
-        time_steps = 10
-        Xs, ys = create_sequences(X_arr, y_arr, time_steps=time_steps)
-        split_idx = int(len(Xs) * 0.8)
-        Xs_test = Xs[split_idx:]
-        ys_test = ys[split_idx:]
-        if Xs_test.size == 0:
-            raise ValueError("Not enough sequence rows for LSTM test split.")
+    if model_name.lower() in ("lstm",):
+        # Create sequences using entire array (so sequences align to original order)
+        Xs, ys = create_sequences(X_arr, y_arr, time_steps=lstm_time_steps)
+        if len(Xs) == 0:
+            raise ValueError("Not enough rows to create LSTM sequences with the requested time_steps.")
+        split_idx_seq = int(len(Xs) * 0.8)
+        Xs_test = Xs[split_idx_seq:]
+        ys_test = ys[split_idx_seq:]
         y_pred = predict_lstm(model, Xs_test)
-        res["y_true"] = ys_test
-        res["y_pred"] = y_pred
-        return res
+        out["y_true"] = ys_test
+        out["y_pred"] = y_pred
+        return out
 
-    raise ValueError("Unknown model_name provided to make_forecast.")
+    raise ValueError(f"Unknown model_name: {model_name}")
