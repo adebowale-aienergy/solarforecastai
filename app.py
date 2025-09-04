@@ -73,7 +73,7 @@ def main():
     elif model_choice == "LSTM":
         model = load_model(LSTM_MODEL_PATH)
     else:
-        model = None  # ✅ FIXED colon issue here
+        model = None  # ✅ FIXED colon issue
 
     # Forecast
     forecast_df = make_forecast(model, country_df, horizon)
@@ -90,4 +90,11 @@ def main():
     # Map
     st.subheader("🌍 Location Map")
     lat, lon = get_country_coordinates(selected_country)
-    st.map(pd.DataFrame({"lat": [lat], "
+    st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}))  # ✅ Corrected line
+
+
+# ---------------------------
+# Run
+# ---------------------------
+if __name__ == "__main__":
+    main()
