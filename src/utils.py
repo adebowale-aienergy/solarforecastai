@@ -1,57 +1,107 @@
-# src/utils.py
-
 import pandas as pd
 import joblib
 import numpy as np
-from tensorflow.keras.models import load_model
-from src.constants import (
-    DATA_PATH, DEFAULT_DATE_COL, DEFAULT_TARGET_COL, DEFAULT_COUNTRY_COL
-)
 
-def load_data():
-    """Load dataset and standardize column names to uppercase."""
-    df = pd.read_csv(DATA_PATH)
-    df.columns = df.columns.str.upper()  # force uppercase
+from sklearn.ensemble import RandomForestRegressor
+from prophet import Prophet
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.callbacks import EarlyStopping
+
+import os
+
+# ===========================
+# Load Dataset
+# ===========================
+def load_data(data_path):
+    df = pd.read_csv(data_path)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"])
     return df
 
-def load_model(model_path, model_type="sklearn"):
-    """Load models depending on type."""
-    if model_type == "sklearn" or model_type == "prophet":
+
+# ===========================
+# Load ML Model
+# ===========================
+def load_model(model_path):
+    try:
         return joblib.load(model_path)
-    elif model_type == "lstm":
-        return load_model(model_path)
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
+    except Exception as e:
+        print(f"⚠️ Could not load model {model_path}: {e}")
+        return None
 
+
+# ===========================
+# Preprocess Data
+# ===========================
 def preprocess_data(df):
-    """Preprocess dataset (ensure uppercase, drop NA)."""
-    df.columns = df.columns.str.upper()
+    cols_to_keep = [
+        "Date", "ALLSKY_SFC_SW_DWN", "CLRSKY_SFC_SW_DWN",
+        "ALLSKY_SFC_SW_DNI", "ALLSKY_SFC_SW_DIFF",
+        "PSH", "T2M", "CLOUD_AMT", "AOD_55", "RH2M", "WS2M"
+    ]
+    df = df[[c for c in cols_to_keep if c in df.columns]]
     df = df.dropna()
-    
-    # Ensure required columns exist
-    for col in [DEFAULT_DATE_COL, DEFAULT_TARGET_COL, DEFAULT_COUNTRY_COL]:
-        if col not in df.columns:
-            raise KeyError(f"Missing required column: {col}")
-    
     return df
 
-def make_forecast(model, df, horizon=7, model_type="sklearn"):
-    """Generate forecast from model."""
-    if model_type == "sklearn":
-        X = df.drop(columns=[DEFAULT_TARGET_COL, DEFAULT_DATE_COL, DEFAULT_COUNTRY_COL])
-        preds = model.predict(X[-horizon:])
-        return preds
 
-    elif model_type == "prophet":
+# ===========================
+# Forecast Helper
+# ===========================
+def make_forecast(model, df, horizon=7, target="ALLSKY_SFC_SW_DWN"):
+    if model is None:
+        # Simple baseline
+        last_val = df[target].iloc[-1]
+        future_dates = pd.date_range(df["Date"].iloc[-1] + pd.Timedelta(days=1), periods=horizon)
+        return pd.DataFrame({"Date": future_dates, target: [last_val] * horizon})
+
+    # Prophet case
+    if isinstance(model, Prophet):
         future = model.make_future_dataframe(periods=horizon)
         forecast = model.predict(future)
-        return forecast[['ds', 'yhat']].tail(horizon)
+        return forecast[["ds", "yhat"]].rename(columns={"ds": "Date", "yhat": target})
 
-    elif model_type == "lstm":
-        X = df.drop(columns=[DEFAULT_TARGET_COL, DEFAULT_DATE_COL, DEFAULT_COUNTRY_COL])
-        X = np.array(X[-horizon:]).reshape((1, horizon, X.shape[1]))
-        preds = model.predict(X)
-        return preds.flatten()
+    # LSTM case
+    if hasattr(model, "predict") and "keras" in str(type(model)):
+        data = df[target].values[-30:].reshape(1, 30, 1)  # use last 30 days
+        preds = []
+        for _ in range(horizon):
+            pred = model.predict(data, verbose=0)[0][0]
+            preds.append(pred)
+            new_input = np.append(data[0, 1:, 0], pred)
+            data = new_input.reshape(1, 30, 1)
 
-    else:
-        raise ValueError(f"Unknown model type: {model_type}")
+        future_dates = pd.date_range(df["Date"].iloc[-1] + pd.Timedelta(days=1), periods=horizon)
+        return pd.DataFrame({"Date": future_dates, target: preds})
+
+    # RandomForest or Sklearn model
+    X = df.drop(columns=["Date", target], errors="ignore")
+    preds = model.predict(X.tail(horizon))
+    future_dates = pd.date_range(df["Date"].iloc[-1] + pd.Timedelta(days=1), periods=horizon)
+    return pd.DataFrame({"Date": future_dates, target: preds})
+
+
+# ===========================
+# Training Functions
+# ===========================
+
+def train_random_forest(df, target="ALLSKY_SFC_SW_DWN", save_path="rf_model.pkl"):
+    X = df.drop(columns=["Date", target], errors="ignore")
+    y = df[target]
+    model = RandomForestRegressor(n_estimators=200, random_state=42)
+    model.fit(X, y)
+    joblib.dump(model, save_path)
+    print(f"✅ Random Forest model saved to {save_path}")
+    return model
+
+
+def train_prophet(df, target="ALLSKY_SFC_SW_DWN", save_path="prophet_model.pkl"):
+    df_prophet = df.rename(columns={"Date": "ds", target: "y"})[["ds", "y"]]
+    model = Prophet()
+    model.fit(df_prophet)
+    joblib.dump(model, save_path)
+    print(f"✅ Prophet model saved to {save_path}")
+    return model
+
+
+def train_lstm(df, target="ALL
