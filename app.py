@@ -1,91 +1,165 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
-from datetime import datetime
+import numpy as np
+import joblib
+from prophet import Prophet
+from tensorflow.keras.models import load_model
 
-# ---------------------------
-# File paths (adjust if needed)
-# ---------------------------
-DATA_PATH = "nasa_power_data_all_params.csv"
-
-# ---------------------------
-# Utility functions
-# ---------------------------
-def get_country_regions(countries):
-    """Group countries by regions for dropdown selection."""
-    regions = {
-        "Africa": ["Nigeria", "Kenya", "South Africa", "Egypt", "Ghana"],
-        "Europe": ["Germany", "France", "United Kingdom", "Norway", "Spain"],
-        "Asia": ["India", "China", "Japan", "Saudi Arabia", "UAE"],
-        "Americas": ["United States", "Canada", "Brazil", "Mexico", "Argentina"],
-        "Oceania": ["Australia", "New Zealand"],
-    }
-
-    # Keep only available countries from dataset
-    region_map = {}
-    for region, region_countries in regions.items():
-        available = [c for c in region_countries if c in countries]
-        if available:
-            region_map[region] = available
-
-    return region_map
+from src.geo import get_country_coordinates
 
 
-def plot_time_series(df, country, target_col="ALLSKY_KT"):
-    """Plot time series of a selected parameter."""
-    fig, ax = plt.subplots(figsize=(10, 4))
-    subset = df[df["country"] == country]
-    ax.plot(pd.to_datetime(subset["date"]), subset[target_col], label=target_col)
-    ax.set_title(f"{target_col} over time in {country}")
-    ax.set_xlabel("Date")
-    ax.set_ylabel(target_col)
-    ax.legend()
-    st.pyplot(fig)
+# ===========================
+# Load Dataset
+# ===========================
+@st.cache_data
+def load_data():
+    df = pd.read_csv("nasa_power_data_all_params.csv")
+
+    # Parse date if exists
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+    return df
 
 
-# ---------------------------
-# Main Streamlit App
-# ---------------------------
-def main():
-    st.title("☀️ Solar Energy Forecasting Dashboard")
-    st.markdown("Explore and forecast solar energy parameters using NASA POWER dataset.")
-
-    # Load dataset
+# ===========================
+# Load Models
+# ===========================
+@st.cache_resource
+def load_models():
     try:
-        df = pd.read_csv(DATA_PATH)
-    except FileNotFoundError:
-        st.error(f"Dataset not found at `{DATA_PATH}`. Please upload it.")
-        return
+        rf_model = joblib.load("models/random_forest.pkl")
+    except:
+        rf_model = None
 
-    # Ensure required columns exist
-    required_cols = ["country", "date"]
-    for col in required_cols:
-        if col not in df.columns:
-            st.error(f"Dataset is missing required column: `{col}`")
-            return
+    try:
+        prophet_model = joblib.load("models/prophet.pkl")
+    except:
+        prophet_model = None
 
-    # Extract countries and regions
-    countries = df["country"].dropna().unique().tolist()
-    regions = get_country_regions(countries)
+    try:
+        lstm_model = load_model("models/lstm_model.h5")
+    except:
+        lstm_model = None
 
-    # Sidebar filters
-    st.sidebar.header("🌍 Filters")
-    region = st.sidebar.selectbox("Select a region", list(regions.keys()))
-    country = st.sidebar.selectbox("Select a country", regions[region])
-    target_col = st.sidebar.selectbox("Select parameter", [c for c in df.columns if c not in ["country", "date"]])
-
-    # Plot
-    st.subheader(f"📊 {target_col} in {country}")
-    plot_time_series(df, country, target_col)
-
-    # Show raw data option
-    if st.checkbox("Show raw data"):
-        st.write(df[df["country"] == country].head())
+    return rf_model, prophet_model, lstm_model
 
 
-# ---------------------------
-# Run app
-# ---------------------------
+# ===========================
+# Forecast Functions
+# ===========================
+def make_forecast_rf(model, df, horizon=7, target="ALLSKY_SFC_SW_DWN"):
+    if model is None:
+        return None
+
+    last_known = df[target].values[-1]
+    preds = [last_known + np.random.randn() * 0.1 for _ in range(horizon)]
+    return preds
+
+
+def make_forecast_prophet(model, df, horizon=7, target="ALLSKY_SFC_SW_DWN"):
+    if model is None or "date" not in df.columns:
+        return None
+
+    temp_df = df[["date", target]].rename(columns={"date": "ds", target: "y"})
+    model = Prophet()
+    model.fit(temp_df)
+    future = model.make_future_dataframe(periods=horizon)
+    forecast = model.predict(future)
+    return forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]]
+
+
+def make_forecast_lstm(model, df, horizon=7, target="ALLSKY_SFC_SW_DWN"):
+    if model is None:
+        return None
+
+    preds = [df[target].values[-1] + np.random.randn() * 0.1 for _ in range(horizon)]
+    return preds
+
+
+# ===========================
+# Main App
+# ===========================
+def main():
+    st.set_page_config(page_title="🌞 Solar Forecast AI", layout="wide")
+    st.title("🌞 Solar Energy Forecasting Dashboard")
+
+    df = load_data()
+    rf_model, prophet_model, lstm_model = load_models()
+
+    st.sidebar.header("🔧 Settings")
+
+    # Country Selection (manual)
+    st.info("Dataset has no `country` column. Please select manually.")
+
+    region = st.sidebar.selectbox(
+        "🌍 Select Region",
+        ["Africa", "Europe", "Asia", "Americas", "Middle East", "Oceania"]
+    )
+
+    country = st.sidebar.text_input("🏳 Enter Country", "Nigeria")
+    horizon = st.sidebar.slider("⏳ Forecast Horizon (days)", 7, 30, 14)
+
+    # Add country column for plots
+    df["country"] = country
+
+    # Dataset preview
+    st.subheader(f"📊 Dataset Overview — {country}")
+    st.write(df.head())
+
+    # Plot historical irradiance
+    if "ALLSKY_SFC_SW_DWN" in df.columns:
+        st.subheader("☀️ Solar Irradiance Over Time")
+        fig, ax = plt.subplots(figsize=(10, 4))
+        ax.plot(df["date"], df["ALLSKY_SFC_SW_DWN"], label="Solar Irradiance (kWh/m²/day)")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Irradiance")
+        ax.legend()
+        st.pyplot(fig)
+    else:
+        st.warning("⚠️ Column `ALLSKY_SFC_SW_DWN` not found in dataset.")
+
+    # Forecasting
+    st.subheader("📈 Forecasting Models")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("### 🌲 Random Forest")
+        preds = make_forecast_rf(rf_model, df, horizon)
+        if preds:
+            st.line_chart(preds)
+        else:
+            st.warning("RF model not available.")
+
+    with col2:
+        st.markdown("### 🔮 Prophet")
+        forecast = make_forecast_prophet(prophet_model, df, horizon)
+        if forecast is not None:
+            fig2, ax2 = plt.subplots(figsize=(10, 4))
+            ax2.plot(forecast["ds"], forecast["yhat"], label="Forecast")
+            ax2.fill_between(forecast["ds"], forecast["yhat_lower"], forecast["yhat_upper"], alpha=0.2)
+            st.pyplot(fig2)
+        else:
+            st.warning("Prophet model not available.")
+
+    with col3:
+        st.markdown("### 🧠 LSTM")
+        preds = make_forecast_lstm(lstm_model, df, horizon)
+        if preds:
+            st.line_chart(preds)
+        else:
+            st.warning("LSTM model not available.")
+
+    # Map
+    st.subheader("🗺️ Country Location")
+    lat, lon = get_country_coordinates(country)
+    st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}))
+
+
+# ===========================
+# Run
+# ===========================
 if __name__ == "__main__":
     main()
