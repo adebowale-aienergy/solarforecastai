@@ -1,73 +1,91 @@
-# app.py
-
-import os
-import sys
 import streamlit as st
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
 
-# Ensure src is in Python path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# ---------------------------
+# File paths (adjust if needed)
+# ---------------------------
+DATA_PATH = "nasa_power_data_all_params.csv"
 
-from src.constants import (
-    DATA_PATH,
-    DEFAULT_DATE_COL,
-    DEFAULT_TARGET_COL,
-    DEFAULT_COUNTRY_COL,
-    DEFAULT_HORIZON,
-    MIN_HORIZON,
-    MAX_HORIZON
-)
-from src.utils import load_data, preprocess_data, make_forecast
-from src.geo import get_country_regions, get_country_coordinates
+# ---------------------------
+# Utility functions
+# ---------------------------
+def get_country_regions(countries):
+    """Group countries by regions for dropdown selection."""
+    regions = {
+        "Africa": ["Nigeria", "Kenya", "South Africa", "Egypt", "Ghana"],
+        "Europe": ["Germany", "France", "United Kingdom", "Norway", "Spain"],
+        "Asia": ["India", "China", "Japan", "Saudi Arabia", "UAE"],
+        "Americas": ["United States", "Canada", "Brazil", "Mexico", "Argentina"],
+        "Oceania": ["Australia", "New Zealand"],
+    }
+
+    # Keep only available countries from dataset
+    region_map = {}
+    for region, region_countries in regions.items():
+        available = [c for c in region_countries if c in countries]
+        if available:
+            region_map[region] = available
+
+    return region_map
 
 
-# ==========================
+def plot_time_series(df, country, target_col="ALLSKY_KT"):
+    """Plot time series of a selected parameter."""
+    fig, ax = plt.subplots(figsize=(10, 4))
+    subset = df[df["country"] == country]
+    ax.plot(pd.to_datetime(subset["date"]), subset[target_col], label=target_col)
+    ax.set_title(f"{target_col} over time in {country}")
+    ax.set_xlabel("Date")
+    ax.set_ylabel(target_col)
+    ax.legend()
+    st.pyplot(fig)
+
+
+# ---------------------------
 # Main Streamlit App
-# ==========================
+# ---------------------------
 def main():
     st.title("☀️ Solar Energy Forecasting Dashboard")
+    st.markdown("Explore and forecast solar energy parameters using NASA POWER dataset.")
 
     # Load dataset
-    df = load_data(DATA_PATH)
+    try:
+        df = pd.read_csv(DATA_PATH)
+    except FileNotFoundError:
+        st.error(f"Dataset not found at `{DATA_PATH}`. Please upload it.")
+        return
 
-    # Sidebar
-    st.sidebar.header("User Input")
+    # Ensure required columns exist
+    required_cols = ["country", "date"]
+    for col in required_cols:
+        if col not in df.columns:
+            st.error(f"Dataset is missing required column: `{col}`")
+            return
 
-    # Country selection
-    countries = df[DEFAULT_COUNTRY_COL].unique().tolist()
-    country = st.sidebar.selectbox("Select Country", countries)
-
-    # Region info (geo.py groups)
+    # Extract countries and regions
+    countries = df["country"].dropna().unique().tolist()
     regions = get_country_regions(countries)
-    country_region = None
-    for reg, reg_countries in regions.items():
-        if country in reg_countries:
-            country_region = reg
-            break
 
-    st.sidebar.write(f"🌍 Region: {country_region if country_region else 'Unknown'}")
+    # Sidebar filters
+    st.sidebar.header("🌍 Filters")
+    region = st.sidebar.selectbox("Select a region", list(regions.keys()))
+    country = st.sidebar.selectbox("Select a country", regions[region])
+    target_col = st.sidebar.selectbox("Select parameter", [c for c in df.columns if c not in ["country", "date"]])
 
-    # Forecast horizon
-    horizon = st.sidebar.slider("Forecast Horizon (days)", MIN_HORIZON, MAX_HORIZON, DEFAULT_HORIZON)
+    # Plot
+    st.subheader(f"📊 {target_col} in {country}")
+    plot_time_series(df, country, target_col)
 
-    # Preprocess and filter
-    df_filtered = preprocess_data(df, country)
-
-    # Show raw data
-    with st.expander("🔎 View Raw Data"):
-        st.dataframe(df_filtered.head(20))
-
-    # Forecast
-    forecast_df = make_forecast(None, df_filtered, horizon)
-
-    st.subheader(f"📈 Forecast for {country} (next {horizon} days)")
-    st.line_chart(forecast_df.set_index(DEFAULT_DATE_COL))
-
-    # Show location on map
-    lat, lon = get_country_coordinates(country)
-    if lat and lon:
-        st.map(pd.DataFrame({"lat": [lat], "lon": [lon]}))
+    # Show raw data option
+    if st.checkbox("Show raw data"):
+        st.write(df[df["country"] == country].head())
 
 
+# ---------------------------
+# Run app
+# ---------------------------
 if __name__ == "__main__":
     main()
