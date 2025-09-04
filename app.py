@@ -1,69 +1,73 @@
-import sys
 import os
-
-# ===========================
-# Ensure src/ is in Python path
-# ===========================
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(PROJECT_ROOT)
-sys.path.append(os.path.join(PROJECT_ROOT, "src"))
-
-# ===========================
-# Imports
-# ===========================
+import sys
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
+# Ensure src/ is in path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from src.utils import (
+    load_data, preprocess_data,
+    load_model, make_forecast,
+    train_random_forest, train_prophet, train_lstm
+)
 from src.constants import (
     DATA_PATH, RF_MODEL_PATH, PROPHET_MODEL_PATH, LSTM_MODEL_PATH,
-    DEFAULT_DATE_COL, DEFAULT_TARGET_COL, DEFAULT_COUNTRY_COL,
-    DEFAULT_HORIZON, MIN_HORIZON, MAX_HORIZON
+    DEFAULT_TARGET_COL, DEFAULT_HORIZON, MIN_HORIZON, MAX_HORIZON
 )
-from src.utils import load_data, load_model, preprocess_data, make_forecast
-from src.geo import get_country_regions, get_country_coordinates
-from src.eval_utils import plot_evaluation_metrics
 
 # ===========================
-# App Title & Description
+# Load & Preprocess Data
 # ===========================
-st.set_page_config(page_title="Solar Energy Forecasting", layout="wide")
-st.title("🌍 Solar Energy Forecasting Dashboard")
-st.write("Forecast solar energy generation using ML models (Random Forest, Prophet, LSTM).")
+@st.cache_data
+def get_data():
+    df = load_data(DATA_PATH)
+    return preprocess_data(df)
 
-# ===========================
-# Sidebar Controls
-# ===========================
-st.sidebar.header("⚙️ Configuration")
+df = get_data()
 
-regions = get_country_regions()
-region = st.sidebar.selectbox("🌎 Select Region", list(regions.keys()))
-country = st.sidebar.selectbox("🏳 Select Country", regions[region])
-
-horizon = st.sidebar.slider("⏳ Forecast Horizon (days)", MIN_HORIZON, MAX_HORIZON, DEFAULT_HORIZON)
-model_choice = st.sidebar.radio("🤖 Select Model", ["Random Forest", "Prophet", "LSTM"])
+st.title("☀️ Solar Energy Forecasting Dashboard")
+st.markdown("Forecast solar radiation using ML models (Random Forest, Prophet, LSTM).")
 
 # ===========================
-# Load Data
+# Sidebar
 # ===========================
-df = load_data()
+st.sidebar.header("⚙️ Settings")
 
-if country not in df[DEFAULT_COUNTRY_COL].unique():
-    st.error(f"❌ No data available for {country}. Please choose another country.")
-    st.stop()
+model_choice = st.sidebar.selectbox(
+    "Choose Forecast Model",
+    ["Baseline", "Random Forest", "Prophet", "LSTM"]
+)
 
-df_country = preprocess_data(df, country, horizon)
+horizon = st.sidebar.slider(
+    "Forecast Horizon (days)", MIN_HORIZON, MAX_HORIZON, DEFAULT_HORIZON
+)
+
+target = st.sidebar.selectbox(
+    "Select Target Variable", [DEFAULT_TARGET_COL] + [c for c in df.columns if c not in ["Date"]]
+)
 
 # ===========================
-# Load Model & Make Predictions
+# Train or Load Models
 # ===========================
 if model_choice == "Random Forest":
-    model = load_model(RF_MODEL_PATH, "sklearn")
-    preds = make_forecast(model, "sklearn", df_country, horizon)
+    if not os.path.exists(RF_MODEL_PATH):
+        st.sidebar.info("Training Random Forest model...")
+        model = train_random_forest(df, target=target, save_path=RF_MODEL_PATH)
+    else:
+        model = load_model(RF_MODEL_PATH)
 
 elif model_choice == "Prophet":
-    model = load_model(PROPHET_MODEL_PATH, "prophet")
-    preds = make_forecast(model, "prophet", df_country, horizon)
+    if not os.path.exists(PROPHET_MODEL_PATH):
+        st.sidebar.info("Training Prophet model...")
+        model = train_prophet(df, target=target, save_path=PROPHET_MODEL_PATH)
+    else:
+        model = load_model(PROPHET_MODEL_PATH)
 
-else:  # LSTM
-    model = load_mode_
+elif model_choice == "LSTM":
+    if not os.path.exists(LSTM_MODEL_PATH):
+        st.sidebar.info("Training LSTM model (may take a while)...")
+        model = train_lstm(df, target=target, save_path=LSTM_MODEL_PATH)
+    else
