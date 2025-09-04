@@ -1,107 +1,87 @@
+# src/utils.py
+
 import pandas as pd
-import joblib
 import numpy as np
-
-from sklearn.ensemble import RandomForestRegressor
-from prophet import Prophet
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense
-from tensorflow.keras.callbacks import EarlyStopping
-
 import os
+import joblib
+from tensorflow.keras.models import load_model
+from src.constants import DATA_PATH, DEFAULT_DATE_COL, DEFAULT_TARGET_COL, DEFAULT_COUNTRY_COL, DATE_FORMAT
 
-# ===========================
+
+# ==========================
 # Load Dataset
-# ===========================
-def load_data(data_path):
-    df = pd.read_csv(data_path)
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"])
+# ==========================
+def load_data(path: str = DATA_PATH) -> pd.DataFrame:
+    """Load NASA POWER dataset and preprocess."""
+    df = pd.read_csv(path)
+
+    # Ensure date column is datetime
+    if DEFAULT_DATE_COL in df.columns:
+        df[DEFAULT_DATE_COL] = pd.to_datetime(df[DEFAULT_DATE_COL], errors="coerce")
+        df = df.dropna(subset=[DEFAULT_DATE_COL])
+    else:
+        raise KeyError(f"{DEFAULT_DATE_COL} not found in dataset")
+
+    # Add country column if missing (for region grouping in app)
+    if DEFAULT_COUNTRY_COL not in df.columns:
+        df[DEFAULT_COUNTRY_COL] = "Nigeria"  # default fallback
+
+    # Sort by date
+    df = df.sort_values(by=DEFAULT_DATE_COL).reset_index(drop=True)
+
     return df
 
 
-# ===========================
-# Load ML Model
-# ===========================
-def load_model(model_path):
-    try:
-        return joblib.load(model_path)
-    except Exception as e:
-        print(f"⚠️ Could not load model {model_path}: {e}")
+# ==========================
+# Load Models
+# ==========================
+def load_model_file(model_path: str, model_type: str = "pickle"):
+    """Load a model (RandomForest, Prophet, or LSTM)."""
+    if not os.path.exists(model_path):
         return None
 
+    if model_type == "pickle":
+        return joblib.load(model_path)
+    elif model_type == "keras":
+        return load_model(model_path)
+    else:
+        raise ValueError("Unsupported model type")
 
-# ===========================
+
+# ==========================
 # Preprocess Data
-# ===========================
-def preprocess_data(df):
-    cols_to_keep = [
-        "Date", "ALLSKY_SFC_SW_DWN", "CLRSKY_SFC_SW_DWN",
-        "ALLSKY_SFC_SW_DNI", "ALLSKY_SFC_SW_DIFF",
-        "PSH", "T2M", "CLOUD_AMT", "AOD_55", "RH2M", "WS2M"
-    ]
-    df = df[[c for c in cols_to_keep if c in df.columns]]
-    df = df.dropna()
+# ==========================
+def preprocess_data(df: pd.DataFrame, country: str = None) -> pd.DataFrame:
+    """Filter by country and ensure target variable exists."""
+    if country and DEFAULT_COUNTRY_COL in df.columns:
+        df = df[df[DEFAULT_COUNTRY_COL] == country]
+
+    if DEFAULT_TARGET_COL not in df.columns:
+        raise KeyError(f"Target column {DEFAULT_TARGET_COL} not found in dataset")
+
     return df
 
 
-# ===========================
-# Forecast Helper
-# ===========================
-def make_forecast(model, df, horizon=7, target="ALLSKY_SFC_SW_DWN"):
-    if model is None:
-        # Simple baseline
-        last_val = df[target].iloc[-1]
-        future_dates = pd.date_range(df["Date"].iloc[-1] + pd.Timedelta(days=1), periods=horizon)
-        return pd.DataFrame({"Date": future_dates, target: [last_val] * horizon})
+# ==========================
+# Forecasting Stub
+# ==========================
+def make_forecast(model, df: pd.DataFrame, horizon: int = 7):
+    """
+    Dummy forecast generator.
+    Later can plug in RF/Prophet/LSTM models.
+    """
+    last_date = df[DEFAULT_DATE_COL].max()
 
-    # Prophet case
-    if isinstance(model, Prophet):
-        future = model.make_future_dataframe(periods=horizon)
-        forecast = model.predict(future)
-        return forecast[["ds", "yhat"]].rename(columns={"ds": "Date", "yhat": target})
+    # Create forecast dates
+    future_dates = pd.date_range(start=last_date + pd.Timedelta(days=1), periods=horizon)
 
-    # LSTM case
-    if hasattr(model, "predict") and "keras" in str(type(model)):
-        data = df[target].values[-30:].reshape(1, 30, 1)  # use last 30 days
-        preds = []
-        for _ in range(horizon):
-            pred = model.predict(data, verbose=0)[0][0]
-            preds.append(pred)
-            new_input = np.append(data[0, 1:, 0], pred)
-            data = new_input.reshape(1, 30, 1)
+    # Dummy forecast: repeat last known value
+    last_val = df[DEFAULT_TARGET_COL].iloc[-1]
+    preds = np.full(shape=horizon, fill_value=last_val)
 
-        future_dates = pd.date_range(df["Date"].iloc[-1] + pd.Timedelta(days=1), periods=horizon)
-        return pd.DataFrame({"Date": future_dates, target: preds})
+    forecast_df = pd.DataFrame({
+        DEFAULT_DATE_COL: future_dates,
+        "Forecast": preds
+    })
 
-    # RandomForest or Sklearn model
-    X = df.drop(columns=["Date", target], errors="ignore")
-    preds = model.predict(X.tail(horizon))
-    future_dates = pd.date_range(df["Date"].iloc[-1] + pd.Timedelta(days=1), periods=horizon)
-    return pd.DataFrame({"Date": future_dates, target: preds})
-
-
-# ===========================
-# Training Functions
-# ===========================
-
-def train_random_forest(df, target="ALLSKY_SFC_SW_DWN", save_path="rf_model.pkl"):
-    X = df.drop(columns=["Date", target], errors="ignore")
-    y = df[target]
-    model = RandomForestRegressor(n_estimators=200, random_state=42)
-    model.fit(X, y)
-    joblib.dump(model, save_path)
-    print(f"✅ Random Forest model saved to {save_path}")
-    return model
-
-
-def train_prophet(df, target="ALLSKY_SFC_SW_DWN", save_path="prophet_model.pkl"):
-    df_prophet = df.rename(columns={"Date": "ds", target: "y"})[["ds", "y"]]
-    model = Prophet()
-    model.fit(df_prophet)
-    joblib.dump(model, save_path)
-    print(f"✅ Prophet model saved to {save_path}")
-    return model
-
-
-def train_lstm(df, target="ALL
+    return forecast_df
