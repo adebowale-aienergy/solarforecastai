@@ -1,73 +1,93 @@
-import os
 import sys
+import os
+
+# Ensure src/ is in Python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
-# Ensure src/ is in path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from src.utils import (
-    load_data, preprocess_data,
-    load_model, make_forecast,
-    train_random_forest, train_prophet, train_lstm
-)
 from src.constants import (
     DATA_PATH, RF_MODEL_PATH, PROPHET_MODEL_PATH, LSTM_MODEL_PATH,
-    DEFAULT_TARGET_COL, DEFAULT_HORIZON, MIN_HORIZON, MAX_HORIZON
+    DEFAULT_DATE_COL, DEFAULT_TARGET_COL, DEFAULT_COUNTRY_COL,
+    DEFAULT_HORIZON, MIN_HORIZON, MAX_HORIZON
 )
+from src.utils import load_data, load_model, preprocess_data, make_forecast
+from src.geo import get_country_regions, get_country_coordinates
+from src.eval_utils import plot_evaluation_metrics
 
-# ===========================
-# Load & Preprocess Data
-# ===========================
+
+# ---------------------------
+# Load Data
+# ---------------------------
 @st.cache_data
-def get_data():
-    df = load_data(DATA_PATH)
-    return preprocess_data(df)
+def get_dataset():
+    return pd.read_csv(DATA_PATH)
 
-df = get_data()
 
-st.title("☀️ Solar Energy Forecasting Dashboard")
-st.markdown("Forecast solar radiation using ML models (Random Forest, Prophet, LSTM).")
+# ---------------------------
+# App Layout
+# ---------------------------
+def main():
+    st.set_page_config(page_title="Solar Energy Forecasting", layout="wide")
+    st.title("☀️ Solar Energy Forecasting Dashboard")
 
-# ===========================
-# Sidebar
-# ===========================
-st.sidebar.header("⚙️ Settings")
+    # Load dataset
+    df = get_dataset()
 
-model_choice = st.sidebar.selectbox(
-    "Choose Forecast Model",
-    ["Baseline", "Random Forest", "Prophet", "LSTM"]
-)
+    # Sidebar: Country & Model selection
+    st.sidebar.header("Settings")
 
-horizon = st.sidebar.slider(
-    "Forecast Horizon (days)", MIN_HORIZON, MAX_HORIZON, DEFAULT_HORIZON
-)
+    regions = get_country_regions(df[DEFAULT_COUNTRY_COL].unique())
+    selected_region = st.sidebar.selectbox("🌍 Select Region", list(regions.keys()))
+    selected_country = st.sidebar.selectbox(
+        "🏳️ Select Country", regions[selected_region]
+    )
 
-target = st.sidebar.selectbox(
-    "Select Target Variable", [DEFAULT_TARGET_COL] + [c for c in df.columns if c not in ["Date"]]
-)
+    model_choice = st.sidebar.radio(
+        "🤖 Choose Forecast Model",
+        ["Random Forest", "Prophet", "LSTM", "Baseline (None)"]
+    )
 
-# ===========================
-# Train or Load Models
-# ===========================
-if model_choice == "Random Forest":
-    if not os.path.exists(RF_MODEL_PATH):
-        st.sidebar.info("Training Random Forest model...")
-        model = train_random_forest(df, target=target, save_path=RF_MODEL_PATH)
-    else:
+    horizon = st.sidebar.slider(
+        "⏳ Forecast Horizon (days)",
+        min_value=MIN_HORIZON,
+        max_value=MAX_HORIZON,
+        value=DEFAULT_HORIZON
+    )
+
+    # Preprocess
+    country_df = df[df[DEFAULT_COUNTRY_COL] == selected_country]
+    if country_df.empty:
+        st.warning(f"No data available for {selected_country}")
+        return
+
+    X, y = preprocess_data(country_df)
+
+    # Load model
+    if model_choice == "Random Forest":
         model = load_model(RF_MODEL_PATH)
-
-elif model_choice == "Prophet":
-    if not os.path.exists(PROPHET_MODEL_PATH):
-        st.sidebar.info("Training Prophet model...")
-        model = train_prophet(df, target=target, save_path=PROPHET_MODEL_PATH)
-    else:
+    elif model_choice == "Prophet":
         model = load_model(PROPHET_MODEL_PATH)
+    elif model_choice == "LSTM":
+        model = load_model(LSTM_MODEL_PATH)
+    else:
+        model = None  # ✅ FIXED colon issue here
 
-elif model_choice == "LSTM":
-    if not os.path.exists(LSTM_MODEL_PATH):
-        st.sidebar.info("Training LSTM model (may take a while)...")
-        model = train_lstm(df, target=target, save_path=LSTM_MODEL_PATH)
-    else
+    # Forecast
+    forecast_df = make_forecast(model, country_df, horizon)
+
+    # Show results
+    st.subheader(f"Forecast for {selected_country}")
+    st.line_chart(forecast_df.set_index(DEFAULT_DATE_COL)[DEFAULT_TARGET_COL])
+
+    # Evaluation
+    st.subheader("📊 Model Evaluation")
+    eval_fig = plot_evaluation_metrics(y, forecast_df[DEFAULT_TARGET_COL])
+    st.pyplot(eval_fig)
+
+    # Map
+    st.subheader("🌍 Location Map")
+    lat, lon = get_country_coordinates(selected_country)
+    st.map(pd.DataFrame({"lat": [lat], "
