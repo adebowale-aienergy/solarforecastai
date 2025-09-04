@@ -1,64 +1,57 @@
 # src/utils.py
+
 import pandas as pd
 import joblib
-import tensorflow as tf
-import pickle
 import numpy as np
-
-from prophet import Prophet
-
+from tensorflow.keras.models import load_model
 from src.constants import (
-    DATA_PATH, DEFAULT_DATE_COL, DEFAULT_TARGET_COL,
-    DEFAULT_COUNTRY_COL
+    DATA_PATH, DEFAULT_DATE_COL, DEFAULT_TARGET_COL, DEFAULT_COUNTRY_COL
 )
 
-# -----------------------------
-# Load Data
-# -----------------------------
 def load_data():
-    return pd.read_csv(DATA_PATH)
+    """Load dataset and standardize column names to uppercase."""
+    df = pd.read_csv(DATA_PATH)
+    df.columns = df.columns.str.upper()  # force uppercase
+    return df
 
-# -----------------------------
-# Load Model
-# -----------------------------
 def load_model(model_path, model_type="sklearn"):
-    if model_type == "sklearn":
+    """Load models depending on type."""
+    if model_type == "sklearn" or model_type == "prophet":
         return joblib.load(model_path)
-    elif model_type == "prophet":
-        with open(model_path, "rb") as f:
-            return pickle.load(f)
     elif model_type == "lstm":
-        return tf.keras.models.load_model(model_path)
+        return load_model(model_path)
     else:
-        raise ValueError("Unsupported model type")
+        raise ValueError(f"Unknown model type: {model_type}")
 
-# -----------------------------
-# Preprocess Data
-# -----------------------------
-def preprocess_data(df, country, horizon):
-    df = df[df[DEFAULT_COUNTRY_COL] == country].copy()
-    df[DEFAULT_DATE_COL] = pd.to_datetime(df[DEFAULT_DATE_COL])
-    df = df.sort_values(DEFAULT_DATE_COL)
-    return df.tail(horizon)
+def preprocess_data(df):
+    """Preprocess dataset (ensure uppercase, drop NA)."""
+    df.columns = df.columns.str.upper()
+    df = df.dropna()
+    
+    # Ensure required columns exist
+    for col in [DEFAULT_DATE_COL, DEFAULT_TARGET_COL, DEFAULT_COUNTRY_COL]:
+        if col not in df.columns:
+            raise KeyError(f"Missing required column: {col}")
+    
+    return df
 
-# -----------------------------
-# Make Forecast
-# -----------------------------
-def make_forecast(model, model_type, df, horizon):
+def make_forecast(model, df, horizon=7, model_type="sklearn"):
+    """Generate forecast from model."""
     if model_type == "sklearn":
-        X = df.drop([DEFAULT_DATE_COL, DEFAULT_TARGET_COL, DEFAULT_COUNTRY_COL], axis=1)
-        preds = model.predict(X)
+        X = df.drop(columns=[DEFAULT_TARGET_COL, DEFAULT_DATE_COL, DEFAULT_COUNTRY_COL])
+        preds = model.predict(X[-horizon:])
         return preds
 
     elif model_type == "prophet":
         future = model.make_future_dataframe(periods=horizon)
         forecast = model.predict(future)
-        return forecast.tail(horizon)["yhat"].values
+        return forecast[['ds', 'yhat']].tail(horizon)
 
     elif model_type == "lstm":
-        values = df[DEFAULT_TARGET_COL].values[-horizon:]
-        preds = model.predict(values.reshape(1, -1, 1))
+        X = df.drop(columns=[DEFAULT_TARGET_COL, DEFAULT_DATE_COL, DEFAULT_COUNTRY_COL])
+        X = np.array(X[-horizon:]).reshape((1, horizon, X.shape[1]))
+        preds = model.predict(X)
         return preds.flatten()
 
     else:
-        raise ValueError("Unsupported model type")
+        raise ValueError(f"Unknown model type: {model_type}")
