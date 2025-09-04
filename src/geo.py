@@ -1,36 +1,57 @@
-# Country Regions and Coordinates for Dropdown + Map
+# src/geo.py
 
-country_regions = {
-    "Africa": ["Nigeria", "Kenya", "South Africa", "Egypt"],
-    "Europe": ["Germany", "France", "United Kingdom", "Norway"],
-    "Asia": ["India", "China", "Japan"],
-    "Americas": ["United States", "Brazil", "Canada"],
-    "Middle East": ["Saudi Arabia", "UAE"],
-    "Oceania": ["Australia"]
+import pandas as pd
+
+# ===========================
+# Region Mapping
+# ===========================
+# You can expand or adjust these groupings if needed
+REGION_MAP = {
+    "Africa": ["Nigeria", "Kenya", "South Africa", "Ghana", "Egypt"],
+    "Europe": ["United Kingdom", "Germany", "France", "Italy", "Spain"],
+    "Asia": ["China", "India", "Japan", "South Korea", "Indonesia"],
+    "Americas": ["United States", "Canada", "Brazil", "Mexico", "Argentina"],
+    "Middle East": ["Saudi Arabia", "UAE", "Iran", "Turkey", "Israel"],
+    "Oceania": ["Australia", "New Zealand", "Fiji", "Papua New Guinea"],
 }
 
-country_coords = {
-    "Nigeria": (9.082, 8.6753),
-    "Kenya": (-0.0236, 37.9062),
-    "South Africa": (-30.5595, 22.9375),
-    "Egypt": (26.8206, 30.8025),
-    "Germany": (51.1657, 10.4515),
-    "France": (46.6034, 1.8883),
-    "United Kingdom": (55.3781, -3.4360),
-    "Norway": (60.4720, 8.4689),
-    "India": (20.5937, 78.9629),
-    "China": (35.8617, 104.1954),
-    "Japan": (36.2048, 138.2529),
-    "United States": (37.0902, -95.7129),
-    "Brazil": (-14.2350, -51.9253),
-    "Canada": (56.1304, -106.3468),
-    "Saudi Arabia": (23.8859, 45.0792),
-    "UAE": (23.4241, 53.8478),
-    "Australia": (-25.2744, 133.7751)
-}
+def get_country_regions(country_list):
+    """
+    Group countries into regions based on REGION_MAP.
+    Returns dict: {region: [countries]}
+    """
+    regions = {region: [] for region in REGION_MAP.keys()}
+    for country in country_list:
+        found = False
+        for region, countries in REGION_MAP.items():
+            if country in countries:
+                regions[region].append(country)
+                found = True
+                break
+        if not found:
+            # If not found, put in "Other"
+            if "Other" not in regions:
+                regions["Other"] = []
+            regions["Other"].append(country)
+    return regions
 
-def get_country_regions():
-    return country_regions
 
-def get_country_coordinates(country):
-    return country_coords.get(country, (0, 0))
+# ===========================
+# Coordinates
+# ===========================
+def get_country_coordinates(country, dataset_path="nasa_power_data_all_params.csv"):
+    """
+    Fetch latitude and longitude for a given country from dataset.
+    Returns (lat, lon) or (None, None) if not found.
+    """
+    try:
+        df = pd.read_csv(dataset_path)
+        if "country" in df.columns and "latitude" in df.columns and "longitude" in df.columns:
+            row = df[df["country"] == country].head(1)
+            if not row.empty:
+                lat = float(row["latitude"].values[0])
+                lon = float(row["longitude"].values[0])
+                return lat, lon
+    except Exception as e:
+        print(f"Geo lookup failed: {e}")
+    return None, None
