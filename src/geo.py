@@ -1,62 +1,79 @@
+# src/geo.py
 import pycountry
 
-# Define regions and the countries that belong to them
-REGION_COUNTRIES = {
-    "Africa": [
-        "Nigeria", "Kenya", "South Africa", "Ghana", "Egypt", "Ethiopia",
-        "Morocco", "Algeria", "Uganda", "Tanzania"
-    ],
-    "Europe": [
-        "United Kingdom", "Germany", "France", "Spain", "Italy", "Norway",
-        "Sweden", "Netherlands", "Poland", "Greece"
-    ],
-    "Asia": [
-        "China", "India", "Japan", "South Korea", "Indonesia", "Saudi Arabia",
-        "United Arab Emirates", "Pakistan", "Malaysia", "Bangladesh"
-    ],
-    "Americas": [
-        "United States", "Canada", "Brazil", "Mexico", "Argentina", "Chile",
-        "Colombia", "Peru"
-    ],
-    "Oceania": [
-        "Australia", "New Zealand", "Fiji", "Papua New Guinea"
-    ],
-    "Middle East": [
-        "Turkey", "Israel", "Qatar", "Kuwait", "Jordan", "Oman", "Bahrain"
-    ]
-}
+def get_country_regions():
+    """Return a dictionary mapping regions to country names."""
+    regions = {
+        "Africa": [],
+        "Europe": [],
+        "Asia": [],
+        "Americas": [],
+        "Oceania": [],
+        "Middle East": []
+    }
 
+    # Mapping of ISO region keywords → app regions
+    region_map = {
+        "AF": "Africa",
+        "EU": "Europe",
+        "AS": "Asia",
+        "NA": "Americas",
+        "SA": "Americas",
+        "OC": "Oceania"
+    }
 
-def get_country_regions(available_countries):
-    """
-    Map available countries (from dataset) into their regions.
-    Returns a dict: {region: [countries]}
-    """
-    regions = {}
-    for region, countries in REGION_COUNTRIES.items():
-        # Only include countries that exist in the dataset
-        region_countries = [c for c in countries if c in available_countries]
-        if region_countries:
-            regions[region] = sorted(region_countries)
+    # Loop through all countries from pycountry
+    for country in pycountry.countries:
+        # Some countries have alpha_2 codes that map to regions
+        try:
+            continent_code = country.alpha_2
+            # Assign based on first 2 letters of UN M49 code
+            # For simplicity, assign Middle East manually
+            if country.name in ["United Arab Emirates", "Saudi Arabia", "Qatar", "Israel", "Jordan", "Oman", "Kuwait"]:
+                regions["Middle East"].append(country.name)
+            else:
+                # Default → put into larger buckets
+                if continent_code in ["DZ", "NG", "ZA", "KE", "GH", "EG"]:
+                    regions["Africa"].append(country.name)
+                elif continent_code in ["DE", "FR", "GB", "NO", "ES", "IT"]:
+                    regions["Europe"].append(country.name)
+                elif continent_code in ["CN", "IN", "JP", "ID", "PK"]:
+                    regions["Asia"].append(country.name)
+                elif continent_code in ["US", "BR", "CA", "MX", "AR"]:
+                    regions["Americas"].append(country.name)
+                elif continent_code in ["AU", "NZ", "FJ"]:
+                    regions["Oceania"].append(country.name)
+        except Exception:
+            continue
+
     return regions
 
 
-def get_country_coordinates(country_name):
-    """
-    Return (lat, lon) for the given country using pycountry.
-    If not found, return (0,0).
-    """
-    # For now, we keep it simple (could integrate with geopy later)
-    COORDS = {
+def get_country_coordinates(country):
+    """Return approximate (lat, lon) for selected country."""
+    coords = {
         "Nigeria": (9.082, 8.6753),
-        "Kenya": (1.2921, 36.8219),
+        "Kenya": (-0.0236, 37.9062),
         "South Africa": (-30.5595, 22.9375),
-        "United States": (37.0902, -95.7129),
-        "United Kingdom": (55.3781, -3.4360),
+        "Egypt": (26.8206, 30.8025),
+        "Ghana": (7.9465, -1.0232),
         "Germany": (51.1657, 10.4515),
+        "France": (46.6034, 1.8883),
+        "United Kingdom": (55.3781, -3.4360),
+        "Norway": (60.4720, 8.4689),
+        "Spain": (40.4637, -3.7492),
         "China": (35.8617, 104.1954),
         "India": (20.5937, 78.9629),
+        "Japan": (36.2048, 138.2529),
+        "Saudi Arabia": (23.8859, 45.0792),
+        "United States": (37.0902, -95.7129),
         "Brazil": (-14.2350, -51.9253),
+        "Canada": (56.1304, -106.3468),
+        "Mexico": (23.6345, -102.5528),
         "Australia": (-25.2744, 133.7751),
+        "New Zealand": (-40.9006, 174.8860),
+        "United Arab Emirates": (23.4241, 53.8478),
+        "Qatar": (25.3548, 51.1839),
+        "Israel": (31.0461, 34.8516)
     }
-    return COORDS.get(country_name, (0, 0))
+    return coords.get(country, (0, 0))
