@@ -8,3 +8,4 @@ plotly
 prophet
 tensorflow-cpu
 joblib
+pycountry
