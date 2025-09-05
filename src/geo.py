@@ -1,57 +1,62 @@
-# src/geo.py
+import pycountry
 
-import pandas as pd
-
-# ===========================
-# Region Mapping
-# ===========================
-# You can expand or adjust these groupings if needed
-REGION_MAP = {
-    "Africa": ["Nigeria", "Kenya", "South Africa", "Ghana", "Egypt"],
-    "Europe": ["United Kingdom", "Germany", "France", "Italy", "Spain"],
-    "Asia": ["China", "India", "Japan", "South Korea", "Indonesia"],
-    "Americas": ["United States", "Canada", "Brazil", "Mexico", "Argentina"],
-    "Middle East": ["Saudi Arabia", "UAE", "Iran", "Turkey", "Israel"],
-    "Oceania": ["Australia", "New Zealand", "Fiji", "Papua New Guinea"],
+# Define regions and the countries that belong to them
+REGION_COUNTRIES = {
+    "Africa": [
+        "Nigeria", "Kenya", "South Africa", "Ghana", "Egypt", "Ethiopia",
+        "Morocco", "Algeria", "Uganda", "Tanzania"
+    ],
+    "Europe": [
+        "United Kingdom", "Germany", "France", "Spain", "Italy", "Norway",
+        "Sweden", "Netherlands", "Poland", "Greece"
+    ],
+    "Asia": [
+        "China", "India", "Japan", "South Korea", "Indonesia", "Saudi Arabia",
+        "United Arab Emirates", "Pakistan", "Malaysia", "Bangladesh"
+    ],
+    "Americas": [
+        "United States", "Canada", "Brazil", "Mexico", "Argentina", "Chile",
+        "Colombia", "Peru"
+    ],
+    "Oceania": [
+        "Australia", "New Zealand", "Fiji", "Papua New Guinea"
+    ],
+    "Middle East": [
+        "Turkey", "Israel", "Qatar", "Kuwait", "Jordan", "Oman", "Bahrain"
+    ]
 }
 
-def get_country_regions(country_list):
+
+def get_country_regions(available_countries):
     """
-    Group countries into regions based on REGION_MAP.
-    Returns dict: {region: [countries]}
+    Map available countries (from dataset) into their regions.
+    Returns a dict: {region: [countries]}
     """
-    regions = {region: [] for region in REGION_MAP.keys()}
-    for country in country_list:
-        found = False
-        for region, countries in REGION_MAP.items():
-            if country in countries:
-                regions[region].append(country)
-                found = True
-                break
-        if not found:
-            # If not found, put in "Other"
-            if "Other" not in regions:
-                regions["Other"] = []
-            regions["Other"].append(country)
+    regions = {}
+    for region, countries in REGION_COUNTRIES.items():
+        # Only include countries that exist in the dataset
+        region_countries = [c for c in countries if c in available_countries]
+        if region_countries:
+            regions[region] = sorted(region_countries)
     return regions
 
 
-# ===========================
-# Coordinates
-# ===========================
-def get_country_coordinates(country, dataset_path="nasa_power_data_all_params.csv"):
+def get_country_coordinates(country_name):
     """
-    Fetch latitude and longitude for a given country from dataset.
-    Returns (lat, lon) or (None, None) if not found.
+    Return (lat, lon) for the given country using pycountry.
+    If not found, return (0,0).
     """
-    try:
-        df = pd.read_csv(dataset_path)
-        if "country" in df.columns and "latitude" in df.columns and "longitude" in df.columns:
-            row = df[df["country"] == country].head(1)
-            if not row.empty:
-                lat = float(row["latitude"].values[0])
-                lon = float(row["longitude"].values[0])
-                return lat, lon
-    except Exception as e:
-        print(f"Geo lookup failed: {e}")
-    return None, None
+    # For now, we keep it simple (could integrate with geopy later)
+    COORDS = {
+        "Nigeria": (9.082, 8.6753),
+        "Kenya": (1.2921, 36.8219),
+        "South Africa": (-30.5595, 22.9375),
+        "United States": (37.0902, -95.7129),
+        "United Kingdom": (55.3781, -3.4360),
+        "Germany": (51.1657, 10.4515),
+        "China": (35.8617, 104.1954),
+        "India": (20.5937, 78.9629),
+        "Brazil": (-14.2350, -51.9253),
+        "Australia": (-25.2744, 133.7751),
+    }
+    return COORDS.get(country_name, (0, 0))
