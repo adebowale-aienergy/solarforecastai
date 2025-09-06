@@ -1,3 +1,16 @@
+import sys, traceback
+print(">>> Streamlit app is starting...")
+
+try:
+    import streamlit as st
+    import pandas as pd
+    import numpy as np
+    # other imports
+except Exception as e:
+    print(">>> Import error:", e)
+    traceback.print_exc()
+    sys.exit(1)
+
 import streamlit as st
 import pandas as pd
 import numpy as np
