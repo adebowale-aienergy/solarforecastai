@@ -1,7 +1,3 @@
-import logging, sys
-logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-print(">>> app.py started loading <<<")
-
 import streamlit as st
 import pandas as pd
 import numpy as np
