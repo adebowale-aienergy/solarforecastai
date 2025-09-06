@@ -18,8 +18,8 @@ st.title("🔆 Solar Forecast AI - Random Forest Debug")
 st.write("If you can see this, Random Forest model is being tested.")
 
 # Try loading Random Forest model
-
-try:rf_model = joblib.load("models/random_forest_model.pkl")
+try:
+    rf_model = joblib.load("models/random_forest_model.pkl")
     st.success("✅ Random Forest model loaded successfully!")
 except Exception as e:
     st.error(f"❌ Error loading Random Forest model: {e}")
