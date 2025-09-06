@@ -23,12 +23,19 @@ from io import BytesIO
 
 try:
     url = "https://raw.githubusercontent.com/adebowale-aienergy/solarforecastai/main/models/random_forest_model.pkl"
+    st.info(f"📡 Downloading model from: {url}")
+
     response = requests.get(url)
-    response.raise_for_status()  # ensure download worked
+    response.raise_for_status()
+
+    st.info(f"✅ Downloaded {len(response.content)} bytes")
+
     rf_model = joblib.load(BytesIO(response.content))
     st.success("✅ Random Forest model loaded successfully (from GitHub)!")
 except Exception as e:
+    import traceback
     st.error(f"❌ Error loading Random Forest model: {e}")
+    st.code(traceback.format_exc())
     rf_model = None
 
 # Demo input
