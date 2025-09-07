@@ -1,50 +1,69 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import joblib
 import os
+import pickle
+import numpy as np
+import pandas as pd
+import streamlit as st
+import plotly.express as px
+import plotly.graph_objects as go
+from prophet import Prophet
+from tensorflow.keras.models import load_model
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-from src.geo import get_country_regions, get_country_coordinates
-
-# -----------------------------
-# Paths to data and models
-# -----------------------------
+# =========================
+# PATHS
+# =========================
 DATA_PATH = "nasa_power_data_all_params.csv"
 RF_MODEL_PATH = "models/random_forest.pkl"
 PROPHET_MODEL_PATH = "models/prophet_model.pkl"
 LSTM_MODEL_PATH = "models/lstm_model.h5"
 
-# -----------------------------
-# Load dataset
-# -----------------------------
+# =========================
+# REGION → COUNTRY MAPPING
+# =========================
+REGION_COUNTRY_MAP = {
+    "Africa": ["Nigeria", "Kenya", "South Africa", "Ghana"],
+    "Europe": ["Germany", "France", "Norway", "UK"],
+    "Asia": ["China", "India", "Japan"],
+    "Americas": ["USA", "Brazil", "Canada"],
+    "Middle East": ["UAE", "Saudi Arabia", "Qatar"],
+    "Oceania": ["Australia", "New Zealand"]
+}
+
+# =========================
+# LOADERS
+# =========================
 @st.cache_data
 def load_data():
     df = pd.read_csv(DATA_PATH)
-    # Normalize column names
-    df.columns = [c.strip().lower() for c in df.columns]
+    df["date"] = pd.to_datetime(df["date"])
     return df
 
-# -----------------------------
-# Load trained models
-# -----------------------------
-def load_model(path, model_type="pkl"):
-    if not os.path.exists(path):
-        return None
-    if model_type == "pkl":
-        return joblib.load(path)
-    elif model_type == "h5":
-        from tensorflow.keras.models import load_model
-        return load_model(path)
-    return None
+@st.cache_resource
+def load_models():
+    rf = pickle.load(open(RF_MODEL_PATH, "rb"))
+    prophet = pickle.load(open(PROPHET_MODEL_PATH, "rb"))
+    lstm = load_model(LSTM_MODEL_PATH)
+    return rf, prophet, lstm
 
-# -----------------------------
-# Forecast stub (can extend)
-# -----------------------------
-def make_forecast(model, X):
-    try:
-        return model.predict(X)
-    except Exception:
-        return np.zeros(len(X))
+# =========================
+# FORECAST FUNCTION
+# =========================
+def make_forecast(model, model_name, df, horizon=30):
+    df = df.copy()
+    if model_name == "Random Forest":
+        X = np.arange(len(df), len(df) + horizon).reshape(-1, 1)
+        preds = model.predict(X)
+        future_dates = pd.date_range(df["date"].max(), periods=horizon + 1, freq="D")[1:]
+        return pd.DataFrame({"date": future_dates, "forecast": preds})
 
-# -----------------------------
-# Main App
+    elif model_name == "Prophet":
+        future = model.make_future_dataframe(periods=horizon)
+        forecast = model.predict(future)
+        return forecast[["ds", "yhat"]].rename(columns={"ds": "date", "yhat": "forecast"})
+
+    elif model_name == "LSTM":
+        data = df["target"].values.reshape(-1, 1)
+        seq_len = 10
+        x_input = data[-seq_len:].reshape(1, seq_len, 1)
+        preds = []
+        for _ in range
