@@ -9,3 +9,4 @@ prophet
 tensorflow-cpu
 joblib
 pycountry
+reverse_geocoder
