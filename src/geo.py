@@ -1,41 +1,36 @@
+import reverse_geocoder as rg
 import pycountry
 
-def get_country_regions(countries):
-    """Group countries into regions (simple fallback)."""
-    regions = {
-        "Africa": [],
-        "Europe": [],
-        "Asia": [],
-        "Americas": [],
-        "Oceania": [],
-        "Other": []
-    }
-    for c in countries:
-        try:
-            country = pycountry.countries.lookup(c)
-            if country.alpha_2 in ["NG", "GH", "ZA", "KE"]:
-                regions["Africa"].append(c)
-            elif country.alpha_2 in ["US", "CA", "BR", "AR"]:
-                regions["Americas"].append(c)
-            elif country.alpha_2 in ["CN", "IN", "JP", "ID"]:
-                regions["Asia"].append(c)
-            elif country.alpha_2 in ["GB", "DE", "FR", "IT"]:
-                regions["Europe"].append(c)
-            elif country.alpha_2 in ["AU", "NZ"]:
-                regions["Oceania"].append(c)
-            else:
-                regions["Other"].append(c)
-        except:
-            regions["Other"].append(c)
-    return regions
+def get_country_from_coords(lat, lon):
+    """Return country code from latitude and longitude using reverse geocoding"""
+    try:
+        result = rg.search((lat, lon), mode=1)[0]
+        return result["cc"]  # e.g. 'NG'
+    except Exception:
+        return "Unknown"
 
-def get_country_coordinates(country_name):
-    # Simplified mapping – extend with real lat/lon if needed
-    coords = {
-        "Nigeria": (9.082, 8.6753),
-        "Ghana": (7.9465, -1.0232),
-        "Kenya": (-1.2921, 36.8219),
-        "United States": (37.0902, -95.7129),
-        "India": (20.5937, 78.9629)
+def country_name_from_code(code):
+    """Convert ISO country code to full country name"""
+    try:
+        return pycountry.countries.get(alpha_2=code).name
+    except Exception:
+        return code
+
+def add_country_column(df):
+    """Ensure dataset has a 'country' column based on lat/lon"""
+    if "country" not in df.columns:
+        df["country"] = df.apply(lambda row: get_country_from_coords(row["LAT"], row["LON"]), axis=1)
+        df["country"] = df["country"].apply(country_name_from_code)
+    return df
+
+def get_country_regions(countries):
+    """Group countries into regions (example mapping)"""
+    regions = {
+        "Africa": ["Nigeria", "Ghana", "Kenya", "South Africa"],
+        "Europe": ["Germany", "France", "UK", "Norway"],
+        "Asia": ["India", "China", "Japan"],
+        "Americas": ["USA", "Brazil", "Canada"],
+        "Oceania": ["Australia", "New Zealand"],
+        "Middle East": ["UAE", "Saudi Arabia", "Israel"]
     }
-    return coords.get(country_name, (0, 0))
+    return regions
