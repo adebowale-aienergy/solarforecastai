@@ -1,76 +1,92 @@
 import streamlit as st
 import pandas as pd
-import joblib
 import numpy as np
+import os
+
 from src.data_utils import load_dataset
 from src.model_utils import load_models, make_prediction
 from src.visualization import plot_forecast, plot_actual_vs_predicted
-from src.geo import get_country_regions, get_country_coordinates
+from src.geo import add_country_column, get_country_regions
 
-# ----------------------------
-# Sidebar Branding
-# ----------------------------
-with st.sidebar:
-    st.image("assets/logo.png", use_container_width=True)
-    st.markdown("### 🌞 SolarForecastAI")
-    st.markdown("Forecasting solar energy with ML & AI")
+# ===========================
+# Paths
+# ===========================
+DATA_PATH = "nasa_power_data_all_params.csv"
+MODELS = {
+    "Random Forest": "models/rf_model.pkl",
+    "Prophet": "models/prophet_model.pkl",
+    "LSTM": "models/lstm_model.h5",
+}
 
-# ----------------------------
+# ===========================
 # Main App
-# ----------------------------
+# ===========================
 def main():
-    st.title("☀️ Solar Energy Forecasting Dashboard")
-
-    # Load dataset
-    df = load_dataset("nasa_power_data_all_params.csv")
-
-    # Regions & Countries
-    countries = df["country"].unique()
-    regions = get_country_regions(countries)
-
-    region = st.sidebar.selectbox("🌍 Select Region", list(regions.keys()))
-    country = st.sidebar.selectbox("🏳️ Select Country", regions[region])
-    lat, lon = get_country_coordinates(country)
-
-    st.sidebar.markdown(f"**Coordinates:** {lat}, {lon}")
-
-    # Load Models
-    models = load_models("models")
-
-    # Model Selection
-    model_choice = st.sidebar.radio("📊 Select Model", list(models.keys()))
-
-    # Forecast Horizon
-    forecast_days = st.sidebar.slider("⏳ Forecast Horizon (days)", 1, 30, 7)
-
-    # Subset Data
-    country_data = df[df["country"] == country]
-
-    # Predictions
-    y_true, y_pred, forecast_df = make_prediction(
-        models[model_choice], country_data, forecast_days
+    st.set_page_config(
+        page_title="SolarForecastAI",
+        page_icon="☀️",
+        layout="wide"
     )
 
-    # ----------------------------
-    # Layout: Two Columns
-    # ----------------------------
+    # Sidebar
+    with st.sidebar:
+        st.image("assets/logo.png", use_container_width=True)
+        st.markdown("### 🌞 SolarForecastAI")
+        st.markdown("Forecasting solar energy with ML & AI")
+
+    # Load dataset
+    df = load_dataset(DATA_PATH)
+
+    # Ensure "country" column exists
+    df = add_country_column(df)
+
+    # Sidebar filters
+    regions = get_country_regions(df["country"].unique())
+    region = st.sidebar.selectbox("🌍 Select Region", list(regions.keys()))
+    country = st.sidebar.selectbox("🏳️ Select Country", regions[region])
+    model_choice = st.sidebar.radio("🤖 Select Model", list(MODELS.keys()))
+
+    st.sidebar.markdown("---")
+    horizon = st.sidebar.slider("🔮 Forecast Horizon (days)", 1, 30, 7)
+
+    # Title
+    st.title("☀️ Solar Forecast Dashboard")
+    st.markdown(f"### Forecasting Solar Energy for **{country}** using {model_choice}")
+
+    # Filter dataset by country
+    country_df = df[df["country"] == country].copy()
+
+    if country_df.empty:
+        st.error(f"No data available for {country}. Try another country.")
+        return
+
+    # Load selected model
+    models = load_models(MODELS)
+    model = models[model_choice]
+
+    # Make forecast
+    forecast_df = make_prediction(model_choice, model, country_df, horizon=horizon)
+
+    # Layout
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.subheader("📈 Forecast Visualization")
-        st.plotly_chart(plot_forecast(forecast_df, country), use_container_width=True)
-        st.subheader("🔍 Actual vs Predicted")
-        st.plotly_chart(plot_actual_vs_predicted(y_true, y_pred, country), use_container_width=True)
+        st.subheader("📈 Forecast vs Actual")
+        fig1 = plot_forecast(country_df, forecast_df)
+        st.plotly_chart(fig1, use_container_width=True)
 
     with col2:
-        st.subheader("📋 Key Forecast Info")
-        st.metric("Forecast Days", forecast_days)
-        st.metric("Selected Model", model_choice)
-        st.metric("Region", region)
-        st.metric("Country", country)
+        st.subheader("📊 Actual vs Predicted")
+        fig2 = plot_actual_vs_predicted(country_df, forecast_df)
+        st.plotly_chart(fig2, use_container_width=True)
 
-        st.markdown("### Forecast Data Preview")
-        st.dataframe(forecast_df.head())
+    # Show raw forecast
+    st.subheader("🔎 Forecast Data")
+    st.dataframe(forecast_df.head(20))
 
+
+# ===========================
+# Run app
+# ===========================
 if __name__ == "__main__":
     main()
