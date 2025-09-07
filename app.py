@@ -1,69 +1,76 @@
-import os
-import pickle
-import numpy as np
-import pandas as pd
 import streamlit as st
-import plotly.express as px
-import plotly.graph_objects as go
-from prophet import Prophet
-from tensorflow.keras.models import load_model
-from sklearn.metrics import mean_absolute_error, mean_squared_error
+import pandas as pd
+import joblib
+import numpy as np
+from src.data_utils import load_dataset
+from src.model_utils import load_models, make_prediction
+from src.visualization import plot_forecast, plot_actual_vs_predicted
+from src.geo import get_country_regions, get_country_coordinates
 
-# =========================
-# PATHS
-# =========================
-DATA_PATH = "nasa_power_data_all_params.csv"
-RF_MODEL_PATH = "models/random_forest.pkl"
-PROPHET_MODEL_PATH = "models/prophet_model.pkl"
-LSTM_MODEL_PATH = "models/lstm_model.h5"
+# ----------------------------
+# Sidebar Branding
+# ----------------------------
+with st.sidebar:
+    st.image("assets/logo.png", use_container_width=True)
+    st.markdown("### 🌞 SolarForecastAI")
+    st.markdown("Forecasting solar energy with ML & AI")
 
-# =========================
-# REGION → COUNTRY MAPPING
-# =========================
-REGION_COUNTRY_MAP = {
-    "Africa": ["Nigeria", "Kenya", "South Africa", "Ghana"],
-    "Europe": ["Germany", "France", "Norway", "UK"],
-    "Asia": ["China", "India", "Japan"],
-    "Americas": ["USA", "Brazil", "Canada"],
-    "Middle East": ["UAE", "Saudi Arabia", "Qatar"],
-    "Oceania": ["Australia", "New Zealand"]
-}
+# ----------------------------
+# Main App
+# ----------------------------
+def main():
+    st.title("☀️ Solar Energy Forecasting Dashboard")
 
-# =========================
-# LOADERS
-# =========================
-@st.cache_data
-def load_data():
-    df = pd.read_csv(DATA_PATH)
-    df["date"] = pd.to_datetime(df["date"])
-    return df
+    # Load dataset
+    df = load_dataset("nasa_power_data_all_params.csv")
 
-@st.cache_resource
-def load_models():
-    rf = pickle.load(open(RF_MODEL_PATH, "rb"))
-    prophet = pickle.load(open(PROPHET_MODEL_PATH, "rb"))
-    lstm = load_model(LSTM_MODEL_PATH)
-    return rf, prophet, lstm
+    # Regions & Countries
+    countries = df["country"].unique()
+    regions = get_country_regions(countries)
 
-# =========================
-# FORECAST FUNCTION
-# =========================
-def make_forecast(model, model_name, df, horizon=30):
-    df = df.copy()
-    if model_name == "Random Forest":
-        X = np.arange(len(df), len(df) + horizon).reshape(-1, 1)
-        preds = model.predict(X)
-        future_dates = pd.date_range(df["date"].max(), periods=horizon + 1, freq="D")[1:]
-        return pd.DataFrame({"date": future_dates, "forecast": preds})
+    region = st.sidebar.selectbox("🌍 Select Region", list(regions.keys()))
+    country = st.sidebar.selectbox("🏳️ Select Country", regions[region])
+    lat, lon = get_country_coordinates(country)
 
-    elif model_name == "Prophet":
-        future = model.make_future_dataframe(periods=horizon)
-        forecast = model.predict(future)
-        return forecast[["ds", "yhat"]].rename(columns={"ds": "date", "yhat": "forecast"})
+    st.sidebar.markdown(f"**Coordinates:** {lat}, {lon}")
 
-    elif model_name == "LSTM":
-        data = df["target"].values.reshape(-1, 1)
-        seq_len = 10
-        x_input = data[-seq_len:].reshape(1, seq_len, 1)
-        preds = []
-        for _ in range
+    # Load Models
+    models = load_models("models")
+
+    # Model Selection
+    model_choice = st.sidebar.radio("📊 Select Model", list(models.keys()))
+
+    # Forecast Horizon
+    forecast_days = st.sidebar.slider("⏳ Forecast Horizon (days)", 1, 30, 7)
+
+    # Subset Data
+    country_data = df[df["country"] == country]
+
+    # Predictions
+    y_true, y_pred, forecast_df = make_prediction(
+        models[model_choice], country_data, forecast_days
+    )
+
+    # ----------------------------
+    # Layout: Two Columns
+    # ----------------------------
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        st.subheader("📈 Forecast Visualization")
+        st.plotly_chart(plot_forecast(forecast_df, country), use_container_width=True)
+        st.subheader("🔍 Actual vs Predicted")
+        st.plotly_chart(plot_actual_vs_predicted(y_true, y_pred, country), use_container_width=True)
+
+    with col2:
+        st.subheader("📋 Key Forecast Info")
+        st.metric("Forecast Days", forecast_days)
+        st.metric("Selected Model", model_choice)
+        st.metric("Region", region)
+        st.metric("Country", country)
+
+        st.markdown("### Forecast Data Preview")
+        st.dataframe(forecast_df.head())
+
+if __name__ == "__main__":
+    main()
