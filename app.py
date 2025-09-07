@@ -18,25 +18,17 @@ st.title("🔆 Solar Forecast AI - Random Forest Debug")
 st.write("If you can see this, Random Forest model is being tested.")
 
 # Try loading Random Forest model
-import requests
-from io import BytesIO
+import os
+
+model_path = os.path.join("models", "random_forest_model.pkl")
 
 try:
-    url = "https://raw.githubusercontent.com/adebowale-aienergy/solarforecastai/main/models/random_forest_model.pkl"
-    st.info(f"📡 Downloading model from: {url}")
-
-    response = requests.get(url)
-    response.raise_for_status()
-
-    st.info(f"✅ Downloaded {len(response.content)} bytes")
-
-    rf_model = joblib.load(BytesIO(response.content))
-    st.success("✅ Random Forest model loaded successfully (from GitHub)!")
+    rf_model = joblib.load(model_path)
+    st.success("✅ Random Forest model loaded successfully (local file)!")
 except Exception as e:
-    import traceback
     st.error(f"❌ Error loading Random Forest model: {e}")
-    st.code(traceback.format_exc())
     rf_model = None
+
 
 # Demo input
 if rf_model:
