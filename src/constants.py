@@ -1,9 +1,10 @@
-﻿# src/constants.py
+# src/constants.py
 
 # =========================
 # Data and File Paths
 # =========================
-DATA_PATH = "nasa_power_global_32countries_features.csv"  # Cleaned and feature-engineered dataset
+DATA_PATH = "https://raw.githubusercontent.com/adebowale-aienergy/solarforecastai/refs/heads/main/data/nasa_power_global_32countries.csv"  
+# Raw link from GitHub – ensures Streamlit and Colab can load data directly
 
 # Model paths
 RF_MODEL_PATH = "rf_solar_forecast_model.pkl"
