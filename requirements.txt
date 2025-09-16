@@ -3,10 +3,12 @@ pandas
 numpy
 scikit-learn
 matplotlib
-seaborn
 plotly
 prophet
-tensorflow-cpu
+statsmodels
+seaborn
 joblib
-pycountry
-reverse_geocoder
+xgboost
+tensorflow
+torch
+pyarrow
