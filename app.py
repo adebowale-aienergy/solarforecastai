@@ -16,7 +16,15 @@ sys.path.insert(0, '/content/')
 
 # Import functions and constants from your updated src modules
 # These imports should now work if '/content/' is in sys.path and 'src' is a directory within it
-from src.data_utils import load_processed_data, get_unique_countries_from_datafile, get_unique_parameters_from_datafile, filter_data, prepare_data_for_model, make_prophet_frame
+from src.data_utils import (
+    load_processed_data,
+    get_unique_countries_from_datafile,
+    get_unique_parameters_from_datafile,
+    filter_data,
+    prepare_data_for_model,
+    make_prophet_frame,
+)
+
 from src.visualization import preview_table, plot_parameter_distribution_boxplot, plot_time_series_by_country, line_actual_vs_pred, prophet_forecast_plot, model_comparison_plot, plot_global_parameter_map
 from src.model_utils import (
     train_random_forest_model, train_prophet_model, train_lstm_model,
