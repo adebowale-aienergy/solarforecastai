@@ -3,7 +3,8 @@
 # =========================
 # Data and File Paths
 # =========================
-DATA_PATH = "https://raw.githubusercontent.com/adebowale-aienergy/solarforecastai/refs/heads/main/data/nasa_power_global_32countries.csv"  
+DATA_PATH = "https://raw.githubusercontent.com/adebowale-aienergy/solarforecastai/main/data/nasa_power_global_32countries.csv"
+ 
 # Raw link from GitHub – ensures Streamlit and Colab can load data directly
 
 # Model paths
@@ -98,3 +99,4 @@ LSTM_FEATURES = [
     "lat",
     "lon"
 ]
+
