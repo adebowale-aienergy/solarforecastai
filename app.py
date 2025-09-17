@@ -1,49 +1,40 @@
 import streamlit as st
 import pandas as pd
-import sys
 import os
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
 
 # --- Imports from your src package ---
 from src.data_utils import (
-    load_processed_data,
     filter_data,
     prepare_data_for_model,
     make_prophet_frame,
     get_unique_values,
-    get_solar_parameters,
 )
 from src.visualization import (
     preview_table,
     plot_parameter_distribution_boxplot,
     plot_time_series_by_country,
-    line_actual_vs_pred,
-    prophet_forecast_plot,
-    model_comparison_plot,
 )
 from src.model_utils import (
     train_random_forest_model, train_prophet_model, train_lstm_model,
-    save_random_forest_model, save_prophet_model, save_lstm_model,
-    load_random_forest_model, load_prophet_model, load_lstm_model,
     predict_random_forest, forecast_prophet, predict_lstm, create_sequences
 )
 from src.eval_utils import calculate_regression_metrics
 from src.constants import (
     TARGET_COL, COUNTRY_COL, PARAMETER_COL, VALUE_COL,
     RF_FEATURES, LSTM_FEATURES, DEFAULT_HORIZON, MIN_HORIZON,
-    MAX_HORIZON, SOLAR_FORECAST_PARAMETERS, PARAMETER_UNITS
+    MAX_HORIZON, SOLAR_FORECAST_PARAMETERS
 )
 from src.geo import get_country_regions, get_country_coordinates
 
 # --- Streamlit App ---
 st.set_page_config(layout="wide", page_title="Global Solar Forecasting Dashboard")
-st.title("Global Solar Forecasting and Monitoring Dashboard")
+st.title("🌍 Global Solar Forecasting and Monitoring Dashboard")
 
 st.markdown("""
-Welcome to the Solar Forecasting and Monitoring Dashboard.
-Explore climate data and potential solar forecasting insights across different countries.
+Welcome to the **Solar Forecasting and Monitoring Dashboard**.  
+Explore climate data and solar forecasting insights across different regions and countries.
 """)
 
 # --- Data Loader ---
@@ -54,14 +45,17 @@ def load_data(model_type=None):
         if model_type == "Random Forest":
             path = os.path.join("data", "features_data.csv")
             df = pd.read_csv(path)
+
         elif model_type in ["Prophet", "LSTM"]:
             path = os.path.join("data", "clean_data.csv")
             df = pd.read_csv(path)
+
             # Standardize date column
             if "observation_date" in df.columns:
                 df.rename(columns={"observation_date": "ds"}, inplace=True)
             elif "date" in df.columns:
                 df.rename(columns={"date": "ds"}, inplace=True)
+
             df["ds"] = pd.to_datetime(df["ds"], errors="coerce")
         else:
             path = os.path.join("data", "features_data.csv")
@@ -69,14 +63,14 @@ def load_data(model_type=None):
 
         return df
     except FileNotFoundError:
-        st.error(f"Error: Data file not found at {path}.")
+        st.error(f"❌ Error: Data file not found at {path}.")
         return None
     except Exception as e:
-        st.error(f"An error occurred while loading the data: {e}")
+        st.error(f"⚠️ An error occurred while loading the data: {e}")
         return None
 
 # --- Sidebar Model Config ---
-st.sidebar.header("Model Configuration")
+st.sidebar.header("⚙️ Model Configuration")
 model_type = st.sidebar.selectbox("Select Model Type", ["Random Forest", "Prophet", "LSTM"])
 
 # Load data dynamically
@@ -88,18 +82,18 @@ all_regions = ["All"] + sorted(list(country_regions.keys()))
 country_coordinates = get_country_coordinates()
 
 if df is not None:
-    st.success("Data loaded successfully!")
+    st.success("✅ Data loaded successfully!")
 
     # --- Display Data Info ---
-    st.header("Data Overview")
-    st.write("First 10 rows of the processed data:")
-    st.dataframe(preview_table(df))
-    st.write(f"Dataset shape: {df.shape}")
-    st.write(f"Columns: {df.columns.tolist()}")
+    st.header("📊 Data Overview")
+    st.write("Preview of the processed dataset:")
+    st.dataframe(preview_table(df), use_container_width=True)
+    st.write(f"**Shape:** {df.shape}")
+    st.write(f"**Columns:** {df.columns.tolist()}")
 
     # --- Data Filtering ---
-    st.sidebar.header("Filter Data")
-    selected_region_filter = st.sidebar.selectbox("Select Continent for Filtering", all_regions)
+    st.sidebar.header("🔎 Filter Data")
+    selected_region_filter = st.sidebar.selectbox("Select Continent", all_regions)
 
     all_countries = get_unique_values(df, COUNTRY_COL)
     all_parameters = get_unique_values(df, PARAMETER_COL)
@@ -110,8 +104,8 @@ if df is not None:
     else:
         available_countries_filter = all_countries
 
-    selected_country_filter = st.sidebar.selectbox("Select Country for Filtering", ["All"] + available_countries_filter)
-    selected_parameter_filter = st.sidebar.selectbox("Select Parameter for Filtering", ["All"] + all_parameters)
+    selected_country_filter = st.sidebar.selectbox("Select Country", ["All"] + available_countries_filter)
+    selected_parameter_filter = st.sidebar.selectbox("Select Parameter", ["All"] + all_parameters)
 
     filtered_df = df.copy()
     if selected_country_filter != "All":
@@ -119,33 +113,35 @@ if df is not None:
     if selected_parameter_filter != "All":
         filtered_df = filter_data(filtered_df, parameter=selected_parameter_filter)
 
-    st.header("Filtered Data")
-    st.write(f"Displaying data filtered by Country: **{selected_country_filter}** and Parameter: **{selected_parameter_filter}**")
-    st.dataframe(preview_table(filtered_df))
+    st.header("📑 Filtered Data")
+    st.write(f"Filtered by **Country:** {selected_country_filter} | **Parameter:** {selected_parameter_filter}")
+    st.dataframe(preview_table(filtered_df), use_container_width=True)
 
     # --- Visualizations ---
-    st.header("Data Visualizations")
+    st.header("🌐 Data Visualizations")
+
+    # Global Map Visualization
     st.subheader("Global Parameter Distribution")
-    map_parameter = st.selectbox("Select Parameter to Display on Map", SOLAR_FORECAST_PARAMETERS)
+    map_parameter = st.selectbox("Select Parameter for Global Map", SOLAR_FORECAST_PARAMETERS)
 
     if map_parameter:
         map_data_parameter = df[df[PARAMETER_COL] == map_parameter].copy()
         if not map_data_parameter.empty:
             avg_param_country = map_data_parameter.groupby(COUNTRY_COL)[VALUE_COL].mean().reset_index()
-            coords_df = pd.DataFrame.from_dict(country_coordinates, orient='index', columns=['lat', 'lon']).reset_index().rename(columns={'index': COUNTRY_COL})
-            map_data = pd.merge(avg_param_country, coords_df, on=COUNTRY_COL, how='left')
-            map_data.dropna(subset=['lat', 'lon', VALUE_COL], inplace=True)
 
-            if not map_data.empty:
-                fig_global_map = px.scatter_geo(
-                    map_data,
-                    lat='lat', lon='lon', hover_name=COUNTRY_COL,
-                    size=VALUE_COL, color=VALUE_COL,
-                    projection="natural earth",
-                    title=f"Average {map_parameter} by Country"
-                )
-                st.plotly_chart(fig_global_map, use_container_width=True)
+            # Choropleth Map for clearer global distribution
+            fig_global_map = px.choropleth(
+                avg_param_country,
+                locations=COUNTRY_COL,
+                locationmode="country names",
+                color=VALUE_COL,
+                hover_name=COUNTRY_COL,
+                color_continuous_scale="YlOrRd",
+                title=f"Average {map_parameter} by Country"
+            )
+            st.plotly_chart(fig_global_map, use_container_width=True)
 
+    # Parameter-specific visualization
     if selected_parameter_filter != "All":
         if selected_country_filter == "All":
             fig_boxplot = plot_parameter_distribution_boxplot(df, selected_parameter_filter)
@@ -156,7 +152,8 @@ if df is not None:
                 fig_ts = plot_time_series_by_country(df, selected_parameter_filter, [selected_country_filter])
                 st.plotly_chart(fig_ts, use_container_width=True)
 
-    # --- Modeling ---
+    # --- Modeling Section ---
+    st.header("🤖 Modeling and Forecasting")
     selected_region_model = st.sidebar.selectbox("Select Continent for Modeling", all_regions)
     if selected_region_model != "All":
         countries_in_region_model = country_regions.get(selected_region_model, [])
@@ -175,13 +172,13 @@ if df is not None:
     model_df = filter_data(df, country=selected_country_model, parameter=selected_parameter_model)
 
     if not model_df.empty:
-        st.header(f"{model_type} Model Training and Forecasting for {selected_parameter_model} in {selected_country_model}")
+        st.subheader(f"{model_type} Forecasting for {selected_parameter_model} in {selected_country_model}")
 
         train_size = int(len(model_df) * 0.8)
         train_df = model_df.iloc[:train_size].copy()
         test_df = model_df.iloc[train_size:].copy()
 
-        if st.button(f"Train {model_type} Model"):
+        if st.button(f"🚀 Train {model_type} Model"):
             try:
                 if model_type == "Random Forest":
                     rf_train_X, rf_train_y = prepare_data_for_model(train_df, selected_parameter_model, RF_FEATURES, VALUE_COL)
@@ -196,19 +193,19 @@ if df is not None:
                     future_periods = len(test_df) + forecast_horizon
                     forecast_results_df = forecast_prophet(model, periods=future_periods)
 
-                    test_df["ds"] = pd.to_datetime(test_df["ds"], errors='coerce')
-                    forecast_results_df['ds'] = pd.to_datetime(forecast_results_df['ds'])
-                    merged_eval_df = pd.merge(test_df, forecast_results_df[['ds','yhat']], on='ds', how='inner')
+                    test_df["ds"] = pd.to_datetime(test_df["ds"], errors="coerce")
+                    forecast_results_df["ds"] = pd.to_datetime(forecast_results_df["ds"])
+                    merged_eval_df = pd.merge(test_df, forecast_results_df[["ds","yhat"]], on="ds", how="inner")
                     y_true_eval = merged_eval_df[VALUE_COL].values
-                    y_pred_eval = merged_eval_df['yhat'].values
+                    y_pred_eval = merged_eval_df["yhat"].values
 
                 elif model_type == "LSTM":
                     lstm_train_df = filter_data(train_df, parameter=selected_parameter_model)
                     lstm_test_df = filter_data(test_df, parameter=selected_parameter_model)
-                    lstm_train_df['ds'] = pd.to_datetime(lstm_train_df['ds'], errors='coerce')
-                    lstm_test_df['ds'] = pd.to_datetime(lstm_test_df['ds'], errors='coerce')
-                    lstm_train_df.set_index('ds', inplace=True)
-                    lstm_test_df.set_index('ds', inplace=True)
+                    lstm_train_df["ds"] = pd.to_datetime(lstm_train_df["ds"], errors="coerce")
+                    lstm_test_df["ds"] = pd.to_datetime(lstm_test_df["ds"], errors="coerce")
+                    lstm_train_df.set_index("ds", inplace=True)
+                    lstm_test_df.set_index("ds", inplace=True)
 
                     features = [col for col in LSTM_FEATURES if col in lstm_train_df.columns]
                     X_train_seq, y_train_seq = create_sequences(lstm_train_df[features], lstm_train_df[VALUE_COL], time_steps=10)
@@ -220,20 +217,19 @@ if df is not None:
 
                 # --- Evaluation ---
                 metrics = calculate_regression_metrics(y_true_eval, y_pred_eval)
-                st.subheader("Model Evaluation")
+                st.subheader("📈 Model Evaluation")
                 st.write(metrics)
 
             except Exception as e:
-                st.error(f"An error occurred during model training or forecasting: {e}")
+                st.error(f"⚠️ Error during model training/forecasting: {e}")
 else:
-    st.warning("Could not load data. Please check the file path and try again.")
+    st.warning("⚠️ Could not load data. Please check the file path and try again.")
 
 # --- About Section ---
-st.sidebar.header("About")
+st.sidebar.header("ℹ️ About")
 st.sidebar.info("""
-This dashboard analyzes climate data from NASA POWER for solar forecasting.
-It showcases data visualization, exploration, and machine learning model
-(Random Forest, Prophet, LSTM) capabilities.
+This dashboard analyzes climate data from **NASA POWER** for solar forecasting.  
+It includes data visualization, exploration, and forecasting using **Random Forest, Prophet, and LSTM models**.  
 
-Data Source: NASA POWER Project (power.larc.nasa.gov)
+**Data Source:** NASA POWER Project (power.larc.nasa.gov)
 """)
