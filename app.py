@@ -96,7 +96,12 @@ if df is not None:
     selected_region_filter = st.sidebar.selectbox("Select Continent", all_regions)
 
     all_countries = get_unique_values(df, COUNTRY_COL)
-    all_parameters = get_unique_values(df, PARAMETER_COL)
+
+    # handle parameters safely
+    if PARAMETER_COL in df.columns:
+        all_parameters = get_unique_values(df, PARAMETER_COL)
+    else:
+        all_parameters = []
 
     if selected_region_filter != "All":
         countries_in_region = country_regions.get(selected_region_filter, [])
@@ -105,12 +110,16 @@ if df is not None:
         available_countries_filter = all_countries
 
     selected_country_filter = st.sidebar.selectbox("Select Country", ["All"] + available_countries_filter)
-    selected_parameter_filter = st.sidebar.selectbox("Select Parameter", ["All"] + all_parameters)
+
+    if PARAMETER_COL in df.columns:
+        selected_parameter_filter = st.sidebar.selectbox("Select Parameter", ["All"] + all_parameters)
+    else:
+        selected_parameter_filter = "All"
 
     filtered_df = df.copy()
     if selected_country_filter != "All":
         filtered_df = filter_data(filtered_df, country=selected_country_filter)
-    if selected_parameter_filter != "All":
+    if PARAMETER_COL in df.columns and selected_parameter_filter != "All":
         filtered_df = filter_data(filtered_df, parameter=selected_parameter_filter)
 
     st.header("📑 Filtered Data")
@@ -120,37 +129,40 @@ if df is not None:
     # --- Visualizations ---
     st.header("🌐 Data Visualizations")
 
-    # Global Map Visualization
-    st.subheader("Global Parameter Distribution")
-    map_parameter = st.selectbox("Select Parameter for Global Map", SOLAR_FORECAST_PARAMETERS)
+    if PARAMETER_COL in df.columns:
+        # Global Map Visualization
+        st.subheader("Global Parameter Distribution")
+        map_parameter = st.selectbox("Select Parameter for Global Map", SOLAR_FORECAST_PARAMETERS)
 
-    if map_parameter:
-        map_data_parameter = df[df[PARAMETER_COL] == map_parameter].copy()
-        if not map_data_parameter.empty:
-            avg_param_country = map_data_parameter.groupby(COUNTRY_COL)[VALUE_COL].mean().reset_index()
+        if map_parameter:
+            map_data_parameter = df[df[PARAMETER_COL] == map_parameter].copy()
+            if not map_data_parameter.empty:
+                avg_param_country = map_data_parameter.groupby(COUNTRY_COL)[VALUE_COL].mean().reset_index()
 
-            # Choropleth Map for clearer global distribution
-            fig_global_map = px.choropleth(
-                avg_param_country,
-                locations=COUNTRY_COL,
-                locationmode="country names",
-                color=VALUE_COL,
-                hover_name=COUNTRY_COL,
-                color_continuous_scale="YlOrRd",
-                title=f"Average {map_parameter} by Country"
-            )
-            st.plotly_chart(fig_global_map, use_container_width=True)
+                # Choropleth Map
+                fig_global_map = px.choropleth(
+                    avg_param_country,
+                    locations=COUNTRY_COL,
+                    locationmode="country names",
+                    color=VALUE_COL,
+                    hover_name=COUNTRY_COL,
+                    color_continuous_scale="YlOrRd",
+                    title=f"Average {map_parameter} by Country"
+                )
+                st.plotly_chart(fig_global_map, use_container_width=True)
 
-    # Parameter-specific visualization
-    if selected_parameter_filter != "All":
-        if selected_country_filter == "All":
-            fig_boxplot = plot_parameter_distribution_boxplot(df, selected_parameter_filter)
-            st.plotly_chart(fig_boxplot, use_container_width=True)
-        else:
-            ts_df = filter_data(df, country=selected_country_filter, parameter=selected_parameter_filter)
-            if not ts_df.empty:
-                fig_ts = plot_time_series_by_country(df, selected_parameter_filter, [selected_country_filter])
-                st.plotly_chart(fig_ts, use_container_width=True)
+        # Parameter-specific visualization
+        if selected_parameter_filter != "All":
+            if selected_country_filter == "All":
+                fig_boxplot = plot_parameter_distribution_boxplot(df, selected_parameter_filter)
+                st.plotly_chart(fig_boxplot, use_container_width=True)
+            else:
+                ts_df = filter_data(df, country=selected_country_filter, parameter=selected_parameter_filter)
+                if not ts_df.empty:
+                    fig_ts = plot_time_series_by_country(df, selected_parameter_filter, [selected_country_filter])
+                    st.plotly_chart(fig_ts, use_container_width=True)
+    else:
+        st.info("⚠️ This dataset doesn’t have a `parameter` column (likely Random Forest). Skipping parameter-based visualizations.")
 
     # --- Modeling Section ---
     st.header("🤖 Modeling and Forecasting")
@@ -162,14 +174,19 @@ if df is not None:
         available_countries_model = all_countries
 
     selected_country_model = st.sidebar.selectbox("Select Country for Modeling", available_countries_model)
-    selected_parameter_model = st.sidebar.selectbox(
-        "Select Parameter for Modeling",
-        all_parameters,
-        index=all_parameters.index(TARGET_COL) if TARGET_COL in all_parameters else 0
-    )
-    forecast_horizon = st.sidebar.number_input("Forecast Horizon (days)", min_value=MIN_HORIZON, max_value=MAX_HORIZON, value=DEFAULT_HORIZON, step=1)
 
-    model_df = filter_data(df, country=selected_country_model, parameter=selected_parameter_model)
+    if PARAMETER_COL in df.columns:
+        selected_parameter_model = st.sidebar.selectbox(
+            "Select Parameter for Modeling",
+            all_parameters,
+            index=all_parameters.index(TARGET_COL) if TARGET_COL in all_parameters else 0
+        )
+        model_df = filter_data(df, country=selected_country_model, parameter=selected_parameter_model)
+    else:
+        selected_parameter_model = TARGET_COL
+        model_df = df[df[COUNTRY_COL] == selected_country_model].copy()
+
+    forecast_horizon = st.sidebar.number_input("Forecast Horizon (days)", min_value=MIN_HORIZON, max_value=MAX_HORIZON, value=DEFAULT_HORIZON, step=1)
 
     if not model_df.empty:
         st.subheader(f"{model_type} Forecasting for {selected_parameter_model} in {selected_country_model}")
@@ -200,8 +217,8 @@ if df is not None:
                     y_pred_eval = merged_eval_df["yhat"].values
 
                 elif model_type == "LSTM":
-                    lstm_train_df = filter_data(train_df, parameter=selected_parameter_model)
-                    lstm_test_df = filter_data(test_df, parameter=selected_parameter_model)
+                    lstm_train_df = filter_data(train_df, parameter=selected_parameter_model) if PARAMETER_COL in df.columns else train_df
+                    lstm_test_df = filter_data(test_df, parameter=selected_parameter_model) if PARAMETER_COL in df.columns else test_df
                     lstm_train_df["ds"] = pd.to_datetime(lstm_train_df["ds"], errors="coerce")
                     lstm_test_df["ds"] = pd.to_datetime(lstm_test_df["ds"], errors="coerce")
                     lstm_train_df.set_index("ds", inplace=True)
