@@ -3,25 +3,27 @@
 # =========================
 # Data and File Paths
 # =========================
+# Main raw dataset (multi-parameter columns per row)
 DATA_PATH = "https://raw.githubusercontent.com/adebowale-aienergy/solarforecastai/main/data/nasa_power_global_32countries.csv"
- 
-# Raw link from GitHub – ensures Streamlit and Colab can load data directly
 
-# Model paths
+# Processed datasets
+FEATURES_DATA_PATH = "https://raw.githubusercontent.com/adebowale-aienergy/solarforecastai/main/data/features_data.csv"
+CLEAN_DATA_PATH = "https://raw.githubusercontent.com/adebowale-aienergy/solarforecastai/main/data/clean_data.csv"
+
+# Model paths (local or GitHub LFS if large)
 RF_MODEL_PATH = "rf_solar_forecast_model.pkl"
-PROPHET_MODEL_PATH = "prophet_solar_forecast_model.json"  # Prophet models usually saved as JSON
+PROPHET_MODEL_PATH = "prophet_solar_forecast_model.json"  # Prophet saved model format
 LSTM_MODEL_PATH = "lstm_solar_forecast_model.h5"
 
 
 # =========================
 # Column Names
 # =========================
-DATE_COL = "observation_date"  # Date column in dataset
-TARGET_COL = "ALLSKY_SFC_SW_DWN"  # Primary target for solar forecasting
-COUNTRY_COL = "country"          # Country column
-PARAMETER_COL = "parameter"      # Climate parameter name
-VALUE_COL = "value"              # Parameter values
+DATE_COL = "observation_date"   # Date column in dataset
+COUNTRY_COL = "country"         # Country column
 
+# ⚠️ Removed PARAMETER_COL and VALUE_COL
+# because the raw dataset has wide-format columns (each parameter has its own column)
 
 # =========================
 # Climate Parameters
@@ -45,7 +47,7 @@ PARAMETER_UNITS = {
     "WS2M": "m/s",
     "RH2M": "%",
     "PRECTOTCORR": "mm",
-    "PS": "kPa"  # Or hPa depending on NASA POWER export
+    "PS": "kPa"
 }
 
 
@@ -71,7 +73,6 @@ MAX_HORIZON = 30
 # =========================
 # Model Features
 # =========================
-# These are the engineered features you’ll actually feed into models
 MODEL_FEATURES = [
     "month",
     "year",
@@ -88,9 +89,9 @@ RF_FEATURES = MODEL_FEATURES.copy()
 # Prophet expects only ['ds', 'y']
 PROPHET_COLS = ["ds", "y"]
 
-# LSTM features (numerical only, sequences)
+# LSTM features
 LSTM_FEATURES = [
-    VALUE_COL,
+    "ALLSKY_SFC_SW_DWN",  # Target column
     "month",
     "year",
     "value_lag1",
@@ -99,4 +100,3 @@ LSTM_FEATURES = [
     "lat",
     "lon"
 ]
-
