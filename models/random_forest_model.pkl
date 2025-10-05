@@ -1,0 +1,8 @@
+**Random Forest** (`random_forest.pkl`)
+   - Random Forest is used for supervised regression on engineered features.
+   - Trained with historical solar irradiance, temperature, humidity, and other features.  
+   - Stored on Hugging Face:
+   [Link Here](https://huggingface.co/datasets/adebowale-aienergy/solarforecastai/resolve/main/models/random_forest_model.pkl) 
+
+
+ 
