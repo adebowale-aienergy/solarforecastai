@@ -1,0 +1,4 @@
+- Prophet is used for time series forecasting on cleaned datasets.
+- Time series forecasting model.  
+- Stored on Hugging Face: 
+  [Link Here](https://huggingface.co/datasets/adebowale-aienergy/solarforecastai/resolve/main/models/prophet_model.pkl)
