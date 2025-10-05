@@ -2,7 +2,7 @@ Models
 
 This folder contains documentation for the trained models used in SolarForecastAI.
 
-### Models Available
+Models Available
 
 1. **Random Forest** (`random_forest.pkl`)
 
@@ -16,3 +16,4 @@ This folder contains documentation for the trained models used in SolarForecastA
 Models are not stored directly here because of GitHub file size limits. 
 
 Please download them automatically from Hugging Face when running `app.py`.
+
