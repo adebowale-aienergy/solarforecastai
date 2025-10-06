@@ -4,11 +4,11 @@ This folder contains documentation for the trained models used in SolarForecastA
 
 Models Available
 
-1. **Random Forest** (`random_forest.pkl`)
+1. **Random Forest** (`random_forest_model.pkl`)
 
-2. **Prophet** (`prophet.pkl`)
+2. **Prophet** (`prophet_model.pkl`)
 
-3. **LSTM** (`model.h5`)  
+3. **LSTM** ('LSTM_model.h5`)  
   
                                       
                                     NOTE
@@ -16,4 +16,5 @@ Models Available
 Models are not stored directly here because of GitHub file size limits. 
 
 Please download them automatically from Hugging Face when running `app.py`.
+
 
