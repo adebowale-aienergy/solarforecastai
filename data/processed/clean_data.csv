@@ -1,0 +1,6 @@
+**Clean Data** (`clean_data.csv`)  
+   - Preprocessed from NASA POWER and CAMS data.  
+   - Includes daily temperature, irradiance, wind speed, humidity, etc.  
+   - Size: ~71 MB  
+   - [Download Here]
+    https://huggingface.co/datasets/adebowale-aienergy/solarforecastai/resolve/main/data/processed/clean_data.csv
