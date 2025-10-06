@@ -1,0 +1,6 @@
+**Comprehensive Hourly Data** (`comprehensive_solar_data_hourly.csv`)  
+   - Unified dataset combining NASA and CAMS data into an **hourly resolution**.  
+   - Used for time-series forecasting and validation.  
+   - Size: ~90 MB  
+   - [Download Here]
+https://huggingface.co/datasets/adebowale-aienergy/solarforecastai/resolve/main/data/merged/comprehensive_solar_data_hourly.csv
