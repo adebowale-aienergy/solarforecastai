@@ -1,3 +1,4 @@
+**Prophet** (`prophet_model.pkl`)
 - Prophet is used for time series forecasting on cleaned datasets.
 - Time series forecasting model.  
 - Stored on Hugging Face: 
