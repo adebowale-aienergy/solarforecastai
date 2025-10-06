@@ -1,0 +1,6 @@
+**Features Data** (`features_data.csv`)  
+   - Engineered features for machine learning training.  
+   - Includes lag values, rolling averages, seasonal/country encoding, etc.  
+   - Size: ~311 MB  
+   - [Download Here]
+   https://huggingface.co/datasets/adebowale-aienergy/solarforecastai/resolve/main/data/processed/features_data.csv
