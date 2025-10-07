@@ -1,6 +1,6 @@
 Models
 
-This folder contains documentation for the trained models used in SolarForecastAI.
+This folder contains documentation for the trained models used in SolarForecastai.
 
 Models Available
 
@@ -8,7 +8,7 @@ Models Available
 
 2. **Prophet** (`prophet_model.pkl`)
 
-3. **LSTM** ('LSTM_model.h5`)  (file located on github repo)
+3. **LSTM** ('LSTM_model.h5`) 
   
                                       
                                     NOTE
@@ -16,6 +16,7 @@ Models Available
 Models are not stored directly here because of GitHub file size limits. 
 
 Please download them automatically from Hugging Face when running `app.py`.
+
 
 
 
