@@ -1,0 +1,4 @@
+**LSTM ** (`LSTM_model.h5`)  
+- Neural network for sequential data.  
+- Stored on Hugging Face: 
+[Link Here]  https://huggingface.co/datasets/adebowale-aienergy/solarforecastai/resolve/main/models/LSTM_model.h5
