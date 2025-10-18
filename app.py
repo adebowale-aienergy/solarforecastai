@@ -7,7 +7,10 @@ import joblib
 import tensorflow as tf
 from huggingface_hub import hf_hub_download
 
-print("Attempting to import preprocess...") # Added print statement
+# Print statements for debugging import paths
+print("Attempting to import from src...")
+
+# Correct the import paths to be relative to the app.py file
 from src.fetch_data import (
     load_clean_data, load_features_data, load_merged_data
 )
