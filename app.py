@@ -6,8 +6,15 @@ import numpy as np
 import joblib
 import tensorflow as tf
 from huggingface_hub import hf_hub_download
+import sys
+import os
+
+# Add the parent directory of 'src' to the Python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Print statements for debugging import paths
+print(f"Current working directory: {os.getcwd()}")
+print(f"sys.path: {sys.path}")
 print("Attempting to import from src...")
 
 # Correct the import paths to be relative to the app.py file
